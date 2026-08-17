@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
@@ -70,6 +70,32 @@ class User:
 
 
 @dataclass
+class Impressum:
+    """Site operator, as § 5 DDG requires for anything but a private page.
+
+    Defaults live here rather than in the example config so an existing
+    deployment picks them up without anyone editing the file in its volume.
+    A fork must set its own; an empty `name` hides the page entirely.
+    """
+
+    name: str = "RebelProject UG (haftungsbeschränkt)"
+    street: str = "Am Küssel 2"
+    city: str = "14469 Potsdam"
+    country: str = "Deutschland"
+    email: str = "gleichnass@rebelproject.org"
+    represented_by: str = ""
+    """Geschäftsführer. A UG must name one."""
+    register: str = ""
+    """Registergericht and number, e.g. "Amtsgericht Potsdam, HRB 12345"."""
+    vat_id: str = ""
+
+    @property
+    def complete(self) -> bool:
+        """Whether everything a company has to state is actually stated."""
+        return bool(self.represented_by and self.register)
+
+
+@dataclass
 class Signup:
     enabled: bool = True
     """Open by default: the point is that friends sign themselves up."""
@@ -93,6 +119,7 @@ class Config:
     defaults: dict
     users: list[User]
     signup: Signup
+    impressum: Impressum = field(default_factory=Impressum)
 
     def user(self, user_id: str) -> User:
         for candidate in self.users:
@@ -160,7 +187,12 @@ def load(path: str | Path) -> Config:
                     f"?u={quote(user.id)}&t={quote(user.unsubscribe)}"
                 )
 
-    return Config(path, users_dir, state_path, defaults, users, signup)
+    known = {f.name for f in fields(Impressum)}
+    impressum = Impressum(**{
+        k: str(v) for k, v in (raw.get("impressum") or {}).items() if k in known
+    })
+
+    return Config(path, users_dir, state_path, defaults, users, signup, impressum)
 
 
 def _shared_channels(raw_defaults: dict, defaults: dict) -> dict[str, dict]:

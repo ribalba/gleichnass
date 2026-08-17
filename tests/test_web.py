@@ -377,3 +377,46 @@ def test_losing_the_last_channel_removes_the_user(project):
     assert not (project.parent / "users.d" / "anna.yaml").exists(), (
         "nothing left to deliver to, so nothing left to keep"
     )
+
+
+def test_the_impressum_carries_the_operator_details(project):
+    from gleichnass.config import Impressum
+
+    legal = config_module.load(project).impressum
+    assert legal.name == "RebelProject UG (haftungsbeschränkt)"
+    assert legal.email == "gleichnass@rebelproject.org"
+    assert not legal.complete, (
+        "a UG must also name its Geschäftsführer and register entry"
+    )
+
+    filled = Impressum(represented_by="A. Person", register="Amtsgericht Potsdam, HRB 1")
+    assert filled.complete
+
+
+def test_the_config_can_override_the_operator(project):
+    project.write_text(
+        BASE + "impressum:\n  name: Someone Else\n  email: hi@example.test\n"
+    )
+    legal = config_module.load(project).impressum
+    assert legal.name == "Someone Else"
+    assert legal.email == "hi@example.test"
+
+
+def test_the_landing_page_links_to_it():
+    assert 'href="/impressum"' in web.landing().decode()
+
+
+def test_link_previews_are_absolute_when_we_know_the_address():
+    """Crawlers for chat previews generally will not follow a relative image."""
+    relative = web.landing().decode()
+    assert 'property="og:image" content="/og.png"' in relative
+
+    absolute = web.landing(base_url="https://gleichnass.de").decode()
+    assert 'property="og:image" content="https://gleichnass.de/og.png"' in absolute
+    assert 'property="og:url" content="https://gleichnass.de/"' in absolute
+
+
+def test_the_page_declares_a_viewport():
+    """Without it a phone lays the page out at 980px and zooms out, so none of
+    the mobile styling applies."""
+    assert 'name="viewport"' in web.landing().decode()

@@ -40,6 +40,10 @@ from .state import Store
 log = logging.getLogger("gleichnass.web")
 
 TEMPLATE = Path(__file__).with_name("templates") / "index.html"
+FAVICON = Path(__file__).with_name("templates") / "favicon.svg"
+OG_IMAGE = Path(__file__).with_name("templates") / "og.png"
+# Inlined so a page built here needs no second request to show it.
+ICON_TAG = '<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNyIgZmlsbD0iIzFhNWZkMCIvPjxwYXRoIGQ9Ik0xNiA1LjVjNC4yIDUuOCA2LjQgOS43IDYuNCAxMi4zYTYuNCA2LjQgMCAxIDEtMTIuOCAwQzkuNiAxNS4yIDExLjggMTEuMyAxNiA1LjVaIiBmaWxsPSIjZmZmZmZmIi8+PC9zdmc+">'
 STYLE_BLOCK = re.compile(r"<style>.*?</style>", re.S)
 TELEGRAM_BLOCK = re.compile(r"[ \t]*<!--telegram:start-->.*?<!--telegram:end-->\n?", re.S)
 TEMPLATE_BOT = "gleichnass_bot"
@@ -144,6 +148,7 @@ def _shell(title: str, body: str) -> bytes:
     return (
         f'<!doctype html><html lang="de"><head><meta charset="utf-8">'
         f'<meta name="viewport" content="width=device-width,initial-scale=1">'
+        f"{ICON_TAG}"
         f"<title>{html.escape(title)}</title>{style.group(0) if style else ''}"
         f'</head><body><div class="page" style="padding-top:3rem;padding-bottom:4rem;'
         f'max-width:38rem">{body}</div></body></html>'
@@ -151,13 +156,21 @@ def _shell(title: str, body: str) -> bytes:
 
 
 def landing(error: str = "", invite_needed: bool = False,
-            telegram_bot: str | None = None) -> bytes:
+            telegram_bot: str | None = None, base_url: str = "") -> bytes:
     """The landing page, with the form's optional parts filled in.
 
     The template is valid on its own: both hooks are HTML comments, so opening
     the file directly still renders the finished page.
     """
     page = _template()
+    if base_url:
+        # Crawlers for chat previews generally will not follow a relative
+        # og:image, so give them the whole address.
+        base = base_url.rstrip("/")
+        page = page.replace('property="og:url" content="/"',
+                            f'property="og:url" content="{html.escape(base)}/"')
+        page = page.replace('property="og:image" content="/og.png"',
+                            f'property="og:image" content="{html.escape(base)}/og.png"')
     if error:
         page = page.replace("<!--error-->", f'<div class="err">{html.escape(error)}</div>')
     # Telegram is in the template so the page reads correctly on its own. Strip
@@ -299,6 +312,39 @@ def _forecast_reaches(client, config, location: Location) -> bool:
     return False
 
 
+_CHANNEL_WORDS = {"ntfy": "die ntfy-App", "telegram": "Telegram"}
+
+
+def _test_result(sent: list[str], failed: list[tuple[str, str]], user) -> str:
+    """Say where the test actually went. "Unterwegs" is not much help when
+    somebody is standing there wondering why Telegram stayed quiet."""
+    where = " und ".join(_CHANNEL_WORDS.get(c, c) for c in sent)
+    waiting = user.unsubscribe and any(
+        c.type == "telegram" for c in user.channels
+    )
+
+    if sent and not failed:
+        note = ""
+        if not any(c.type == "telegram" for c in user.channels):
+            note = ('<p class="note" style="margin-top:1rem">Telegram ist noch nicht '
+                    "verbunden. Öffne dafür den Bot über den Knopf oder den QR-Code "
+                    "auf der vorigen Seite, dann probiere es noch einmal.</p>")
+        return (f"<h1>Unterwegs an {html.escape(where)}.</h1>"
+                '<p class="lede">Kommt nichts an, prüfe, ob du das Thema in der App '
+                f"wirklich abonniert hast.</p>{note}"
+                '<p class="note" style="margin-top:1.2rem">'
+                '<a href="/">Zurück zur Startseite</a></p>')
+
+    problems = "".join(
+        f"<li>{html.escape(_CHANNEL_WORDS.get(c, c))}: {html.escape(why)}</li>"
+        for c, why in failed
+    )
+    head = (f"<h1>Teilweise geklappt.</h1><p class=\"lede\">Unterwegs an "
+            f"{html.escape(where)}.</p>") if sent else "<h1>Das hat nicht geklappt.</h1>"
+    return (f"{head}<ul class=\"note\" style=\"margin-top:1rem\">{problems}</ul>"
+            '<p class="note" style="margin-top:1.2rem"><a href="/">Zurück</a></p>')
+
+
 def describe_rule(rule: dict, language: str = "de") -> str:
     """The rule as a sentence, worded once in message.py and reused here."""
     return message.describe(rule.get("preset", ""), rule.get("at"), language)
@@ -374,6 +420,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, landing(
                 invite_needed=bool(config.signup.invite_code),
                 telegram_bot=telegram_bot_for(config),
+                base_url=self._base_url(config),
             ))
         elif route == "/places":
             if not self.settings["browse"].allow(self._client()):
@@ -383,6 +430,15 @@ class Handler(BaseHTTPRequestHandler):
             self._leave_form(parse_qs(urlparse(self.path).query))
         elif route.startswith("/abo/"):
             self._subscribe(route[len("/abo/"):], parse_qs(urlparse(self.path).query))
+        elif route == "/impressum":
+            self._impressum()
+        elif route == "/og.png":
+            self._send(200, OG_IMAGE.read_bytes(), "image/png")
+        elif route == "/favicon.svg":
+            self._send(200, FAVICON.read_bytes(), "image/svg+xml")
+        elif route == "/favicon.ico":
+            # Browsers still ask for this by name; the SVG answers for both.
+            self._send(200, FAVICON.read_bytes(), "image/svg+xml")
         elif route == "/healthz":
             self._send(200, b"ok", "text/plain; charset=utf-8")
         else:
@@ -414,6 +470,74 @@ class Handler(BaseHTTPRequestHandler):
         ).rstrip("/")
         label = (query.get("ort", [""])[0] or "GleichNass")[:40]
         self._send(200, _shell("Abo einrichten", subscribe_page(topic, label, server)))
+
+    def _impressum(self):
+        config = self._config()
+        legal = config.impressum
+        if not legal.name:
+            return self._not_found()
+
+        def row(label, value):
+            return (f'<p style="margin-top:.9rem"><strong>{html.escape(label)}</strong><br>'
+                    f'{value}</p>') if value else ""
+
+        address = "<br>".join(
+            html.escape(part) for part in (legal.street, legal.city, legal.country) if part
+        )
+        mail = (f'<a href="mailto:{html.escape(legal.email)}">{html.escape(legal.email)}</a>'
+                if legal.email else "")
+
+        self._send(200, _shell("Impressum", f"""
+<h1 style="margin-bottom:.8rem">Impressum</h1>
+<p class="lede">Angaben gemäß § 5 DDG.</p>
+
+<div class="signup" style="margin-top:1.8rem">
+  <div>
+    {row("Anbieter", html.escape(legal.name) + "<br>" + address)}
+    {row("Vertreten durch", html.escape(legal.represented_by))}
+    {row("Kontakt", mail)}
+    {row("Registereintrag", html.escape(legal.register))}
+    {row("Umsatzsteuer-ID", html.escape(legal.vat_id))}
+  </div>
+</div>
+
+<h2 style="margin-top:2.5rem">Datenschutz</h2>
+<div class="signup" style="margin-top:1rem">
+  <div>
+    <p><strong>Was gespeichert wird</strong></p>
+    <p class="privacy" style="margin-top:.3rem">
+      Dein Name, dein Ort mit Koordinaten, die von dir gewählten Zeiten und der
+      Kanal, über den du die Meldungen bekommst: ein ntfy-Thema oder eine
+      Telegram-Chat-ID. Keine E-Mail-Adresse, keine Telefonnummer, kein Passwort.
+    </p>
+  </div>
+  <div>
+    <p><strong>Wofür</strong></p>
+    <p class="privacy" style="margin-top:.3rem">
+      Ausschließlich dafür, dir die Regenmeldungen zu schicken, die du
+      ausgewählt hast. Keine Werbung, keine Weitergabe, keine Auswertung.
+    </p>
+  </div>
+  <div>
+    <p><strong>Wer die Daten sonst noch sieht</strong></p>
+    <p class="privacy" style="margin-top:.3rem">
+      Für die Vorhersage werden deine Koordinaten an den
+      <a href="https://brightsky.dev">Bright-Sky</a>-Dienst,
+      <a href="https://open-meteo.com">Open-Meteo</a> und
+      <a href="https://www.met.no">MET Norway</a> übermittelt. Die Zustellung
+      läuft über <a href="https://ntfy.sh">ntfy</a> beziehungsweise Telegram.
+    </p>
+  </div>
+  <div>
+    <p><strong>Löschen</strong></p>
+    <p class="privacy" style="margin-top:.3rem">
+      In jeder Meldung steckt ein Abmelde-Link. Ein Klick darauf löscht alles
+      zu dir Gespeicherte, sofort und vollständig. Oder schreib an {mail}.
+    </p>
+  </div>
+</div>
+
+<p class="note" style="margin-top:1.5rem"><a href="/">Zurück zur Startseite</a></p>"""))
 
     def _leaving(self, query: dict):
         """Whoever this link belongs to, if the token really is theirs."""
@@ -616,32 +740,41 @@ class Handler(BaseHTTPRequestHandler):
             log.warning("rejected /test for %s from %s", user.id, self._client())
             return self._send(403, _shell("Nicht erlaubt", "<h1>Nicht erlaubt.</h1>"))
 
-        try:
-            note = message.test_notification(user)
-            with httpx.Client(timeout=15.0) as client:
-                for spec in user.channels:
+        # Registration only stores a Telegram code; the channel is attached when
+        # the code reaches the bot. Claim it here, or pressing this button right
+        # after scanning would quietly test ntfy alone.
+        user = self._claim_telegram(config, user)
+
+        sent, failed = [], []
+        note = message.test_notification(user)
+        with httpx.Client(timeout=15.0) as client:
+            for spec in user.channels:
+                try:
                     notify.build(spec.type, spec.settings).send(client, note)
+                except Exception as error:  # noqa: BLE001
+                    log.error("test to %s via %s failed: %s", user.id, spec.type, error)
+                    failed.append((spec.type, str(error)))
+                else:
+                    sent.append(spec.type)
+
+        self._send(200, _shell("Test", _test_result(sent, failed, user)))
+
+    def _claim_telegram(self, config, user):
+        """Attach a Telegram chat that has just messaged the bot, and return
+        the user as they now stand."""
+        token = (config.defaults["channels"].get("telegram") or {}).get("token")
+        if not token or user.id not in telegram_link.pending(config):
+            return user
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                telegram_link.link_waiting(config, client, token)
         except Exception as error:  # noqa: BLE001
-            log.error("test notification for %s failed: %s", user.id, error)
-            return self._send(
-                200,
-                _shell(
-                    "Test fehlgeschlagen",
-                    "<h1>Das hat nicht geklappt.</h1>"
-                    f'<p class="lede">{html.escape(str(error))}</p>'
-                    '<p class="note"><a href="/">Zurück</a></p>',
-                ),
-            )
-        self._send(
-            200,
-            _shell(
-                "Test unterwegs",
-                "<h1>Testnachricht ist unterwegs.</h1>"
-                '<p class="lede">Kommt sie nicht an, prüfe, ob du das Thema in der '
-                "ntfy-App abonniert hast.</p>"
-                '<p class="note"><a href="/">Zurück zur Startseite</a></p>',
-            ),
-        )
+            log.warning("could not claim Telegram links: %s", error)
+            return user
+        try:
+            return self._config().user(user.id)
+        except KeyError:
+            return user
 
     # -- plumbing --------------------------------------------------------
 
