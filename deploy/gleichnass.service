@@ -1,0 +1,21 @@
+[Unit]
+Description=GleichNass, check for rain and notify
+Documentation=https://github.com/ribalba/gleichnass
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=gleichnass
+WorkingDirectory=/var/lib/gleichnass
+Environment=GLEICHNASS_CONFIG=/var/lib/gleichnass/gleichnass.yaml
+# Only if anyone uses Telegram. Keep the token out of the config file.
+# EnvironmentFile=-/etc/gleichnass.env
+ExecStart=/opt/gleichnass/.venv/bin/gleichnass run
+
+# Nothing here needs any of this.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/gleichnass

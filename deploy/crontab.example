@@ -1,0 +1,10 @@
+# gleichnass via plain cron, if you would rather not use systemd or Docker.
+#   crontab -e   and paste this, adjusting the paths.
+#
+# Every rule decides for itself whether it is due, so this only has to tick
+# more often than the shortest rule interval.
+
+GLEICHNASS_CONFIG=/var/lib/gleichnass/gleichnass.yaml
+# GLEICHNASS_TELEGRAM_TOKEN=...
+
+*/5 * * * * /opt/gleichnass/.venv/bin/gleichnass run >> /var/log/gleichnass.log 2>&1

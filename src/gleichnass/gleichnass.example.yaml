@@ -1,0 +1,93 @@
+# gleichnass configuration.
+#
+# This file holds the settings shared by everyone. Individual people live in
+# one file each under users.d/, written by `gleichnass add-user` or by the
+# signup site, which is why nothing here gets rewritten by the program, and
+# your comments survive.
+
+defaults:
+  timezone: Europe/Berlin
+  language: de                 # de or en
+
+  # What counts as rain. Compared as intensity, so the same numbers work for a
+  # five-minute radar frame and an hourly model step.
+  min_mm_per_hour: 0.2
+  min_probability: 50
+
+  # A shower must add up to at least this much before it is worth a
+  # notification. Stops a single noisy radar frame from waking anyone.
+  min_total_mm: 0.1
+
+  # How many providers must agree before anyone's phone buzzes.
+  min_agreement: 1
+
+  # Asked in this order; the first one that has data for the window is the one
+  # quoted in the message. dwd-radar only reaches two hours ahead but is by far
+  # the best source inside them.
+  providers: [dwd-radar, icon-d2, brightsky]
+
+  # Settings shared by everyone using a given channel. Each user picks which
+  # channels they want; someone on both gets the right settings for each.
+  channels:
+    ntfy:
+      server: https://ntfy.sh
+    telegram:
+      # One bot serves everyone. Keep its token in the environment, never here.
+      # ${...} is read from the environment, write it on its own line like
+      # this; inside a {a: b} one-liner YAML needs it quoted as "${VAR}".
+      token: ${GLEICHNASS_TELEGRAM_TOKEN}
+
+  # The channel type assumed when a user names one without saying which.
+  channel_type: ntfy
+
+# Where SQLite keeps "already told them about this shower".
+state_path: gleichnass.sqlite3
+users_dir: users.d
+
+# The website (`gleichnass serve`). It serves the landing page and takes
+# registrations, so friends sign themselves up and you never edit a file.
+signup:
+  enabled: true
+  title: GleichNass
+
+  # Registration is open. Set an invite code to narrow it to people you gave
+  # the code to, or leave it unset for anyone with the link.
+  # invite_code: ${GLEICHNASS_INVITE_CODE}
+
+  # Signups allowed from one address per hour. Open registration faces the
+  # whole internet, so this is what stops a script filling users.d/.
+  per_hour: 8
+
+  # Name your Telegram bot here and the site offers Telegram alongside ntfy.
+  # People link themselves with a code, so you never look up a chat id.
+  # The token belongs in the environment: see defaults.channels.telegram.
+  # telegram_bot: gleichnass_bot
+
+# Users normally live in users.d/, but you can also write them here:
+#
+# users:
+#   - id: didi
+#     name: Didi
+#     location: {lat: 47.6603, lon: 9.1758, name: Konstanz}
+#
+#     # One channel:
+#     channel: {type: ntfy, topic: regen-CHANGE-ME}
+#
+#     # ...or several, and every notification goes to all of them. Handy while
+#     # trying Telegram out, or to reach a tablet as well as a phone:
+#     # channels:
+#     #   - {type: ntfy, topic: regen-CHANGE-ME}
+#     #   - {type: telegram, chat_id: 12345678}
+#
+#     rules:
+#       - preset: night        # 20:00, looks 12 h ahead
+#       - preset: morning      # 08:00, looks 12 h ahead
+#       - preset: imminent     # every 15 min, looks 1 h ahead
+#
+#       # Presets are only defaults; override any field, or write a rule
+#       # from scratch with a name, a window and either `at` or `every`:
+#       - name: bike-commute
+#         at: "07:30"
+#         window: 2h
+#         notify_when_dry: true
+#         min_mm_per_hour: 0.1

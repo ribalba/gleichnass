@@ -1,0 +1,21 @@
+[project]
+name = "gleichnass"
+version = "0.1.0"
+description = "Notifies you when it is about to rain"
+readme = "README.md"
+license = { text = "AGPL-3.0-or-later" }
+requires-python = ">=3.11"
+dependencies = ["httpx>=0.27", "pyyaml>=6.0", "segno>=1.6"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+gleichnass = "gleichnass.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gleichnass"]

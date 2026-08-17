@@ -1,0 +1,912 @@
+<meta charset="utf-8">
+<title>GleichNass</title>
+
+<!--
+  One-page site for GleichNass. Self-contained: no external fonts, scripts,
+  images or network requests of any kind.
+
+  Design notes
+  ------------
+  Aimed at friends signing up, not at developers: big type, big buttons, warm
+  colour, plenty of room. Two colours carry it, a rain blue and a sun amber,
+  and sections alternate between pale grounds of each instead of being split by
+  rules. Blue always means rain, amber always means "go", so the colour is
+  doing a job rather than decorating.
+
+  The hero is a drawn phone rather than a photo, so it stays sharp at any size
+  and costs no bytes. Its screen keeps one fixed palette in both themes,
+  because a phone screenshot does not change colour with the visitor's setting.
+-->
+
+<style>
+  :root {
+    --paper:    #ffffff;
+    --sky:      #e7f0fd;
+    --sky-edge: #c6dcfa;
+    --bar-soft: #9dc2f0;
+    --sun-pale: #fff4d9;
+    --sun:      #ffc233;
+    --sun-edge: #e8a200;
+    --blue:     #1a5fd0;
+    --ink:      #14213a;
+    --muted:    #56668a;
+    --card:     #ffffff;
+    --err-bg:   #fdeceb;
+    --err-ink:  #8c1d13;
+    --shadow:   0 1px 2px rgb(20 33 58 / .07), 0 12px 28px -14px rgb(20 33 58 / .28);
+
+    /* Fixed, theme-independent: this is a picture of a phone. */
+    --phone-body:   #0c1320;
+    --phone-screen: #1d3a5f;
+    --phone-glass:  rgb(255 255 255 / .94);
+
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+    --page: 64rem;
+    --r: 18px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:    #0f172b;
+      --sky:      #17263f;
+      --sky-edge: #24395c;
+      --bar-soft: #3d6091;
+      --sun-pale: #2a2114;
+      --sun:      #ffca4d;
+      --sun-edge: #b98200;
+      --blue:     #6ea6ff;
+      --ink:      #e9eefb;
+      --muted:    #97a6c4;
+      --card:     #17233c;
+      --err-bg:   #3a1a17;
+      --err-ink:  #ffb4a8;
+      --shadow:   0 1px 2px rgb(0 0 0 / .4), 0 14px 32px -16px rgb(0 0 0 / .8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:    #0f172b;
+    --sky:      #17263f;
+    --sky-edge: #24395c;
+    --bar-soft: #3d6091;
+    --sun-pale: #2a2114;
+    --sun:      #ffca4d;
+    --sun-edge: #b98200;
+    --blue:     #6ea6ff;
+    --ink:      #e9eefb;
+    --muted:    #97a6c4;
+    --card:     #17233c;
+    --err-bg:   #3a1a17;
+    --err-ink:  #ffb4a8;
+    --shadow:   0 1px 2px rgb(0 0 0 / .4), 0 14px 32px -16px rgb(0 0 0 / .8);
+  }
+
+  * { box-sizing: border-box; }
+
+  html { background: var(--sky); }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 400 17px/1.6 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page { max-width: var(--page); margin: 0 auto; padding: 0 1.5rem; }
+
+  h1, h2, h3 { margin: 0; text-wrap: balance; letter-spacing: -.028em; }
+  h1 { font-size: clamp(2.15rem, 5.6vw, 3.5rem); font-weight: 800; line-height: 1.06; }
+  h2 { font-size: clamp(1.7rem, 3.6vw, 2.3rem); font-weight: 800; line-height: 1.12; }
+  h3 { font-size: 1.22rem; font-weight: 700; line-height: 1.25; }
+  p  { margin: 0; }
+  .lede { font-size: 1.16rem; line-height: 1.55; color: var(--muted); max-width: 32rem; }
+  .lede b { color: var(--ink); font-weight: 700; }
+  .note { font-size: .95rem; color: var(--muted); max-width: 34rem; }
+
+  a { color: var(--blue); font-weight: 600; text-underline-offset: .18em; }
+  a:focus-visible, .btn:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+
+  /* ---- buttons: big, round, unmissable ------------------------------ */
+
+  .btn {
+    display: inline-flex; align-items: center; gap: .55rem;
+    padding: 1rem 1.7rem; border-radius: 999px; border: 2px solid transparent;
+    font: 700 1.02rem/1 var(--sans); text-decoration: none; white-space: nowrap;
+  }
+  .btn-go { background: var(--sun); color: #14213a; border-color: var(--sun-edge); }
+  .btn-go:hover { background: var(--sun-edge); }
+  .btn-quiet { background: transparent; color: var(--ink); border-color: var(--sky-edge); }
+  .btn-quiet:hover { border-color: var(--blue); color: var(--blue); }
+  .buttons { display: flex; flex-wrap: wrap; gap: .8rem; }
+
+  /* ---- header ------------------------------------------------------- */
+
+  .top { background: var(--sky); }
+  .top .page {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: .4rem 1rem; padding-top: 1.1rem; padding-bottom: 1.1rem;
+    flex-wrap: wrap;  /* nav drops to its own line before the name breaks */
+  }
+  .brand { display: inline-flex; align-items: center; gap: .5rem;
+           font-weight: 800; font-size: 1.1rem; white-space: nowrap; }
+  .brand svg { color: var(--blue); flex: none; }
+  .top nav { display: flex; gap: 1.4rem; font-size: .97rem; }
+  .top nav a { text-decoration: none; }
+  .top nav a:hover { text-decoration: underline; }
+  @media (max-width: 34rem) { .top nav a.hide-sm { display: none; } }
+
+  /* ---- hero --------------------------------------------------------- */
+
+  .hero { background: var(--sky);
+          padding: clamp(1.5rem, 4vw, 3rem) 0 clamp(1.75rem, 4vw, 2.5rem); }
+  .hero .page { display: grid; gap: 2.75rem; align-items: center; }
+  @media (min-width: 56rem) { .hero .page { grid-template-columns: 1.05fr .95fr; gap: 3.5rem; } }
+  .hero-copy { display: flex; flex-direction: column; gap: 1.5rem; align-items: flex-start; }
+  .hero h1 { max-width: 19ch; }
+
+  /* ---- the phone ---------------------------------------------------- */
+
+  .phone {
+    /* Taller than its slot, so the bottom of the handset runs on under the
+       white section below and gets covered by it. */
+    width: min(320px, 82vw); margin: 0 auto -9rem;
+    background: var(--phone-body); border-radius: 40px; padding: 11px;
+    box-shadow: 0 2px 6px rgb(12 19 32 / .3), 0 34px 60px -28px rgb(12 19 32 / .65);
+  }
+  .screen {
+    position: relative; overflow: hidden;
+    border-radius: 30px; background: var(--phone-screen);
+    min-height: 36rem; padding: 2.6rem .6rem 2.2rem;
+    display: flex; flex-direction: column; gap: .5rem;
+  }
+  .notch {
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 96px; height: 20px; background: var(--phone-body); border-radius: 0 0 13px 13px;
+  }
+  .lock { text-align: center; color: #fff; margin-bottom: 1.1rem; }
+  .lock .t { font-size: 3.1rem; font-weight: 300; line-height: 1; letter-spacing: -.03em; }
+  .lock .d { font-size: .82rem; opacity: .82; margin-top: .3rem; }
+
+  .push {
+    background: var(--phone-glass); color: #14213a;
+    border-radius: 15px; padding: .7rem .8rem; text-align: left;
+  }
+  .push-head {
+    display: flex; align-items: center; gap: .4rem;
+    font-size: .72rem; font-weight: 700; color: #5a6a86; letter-spacing: .01em;
+  }
+  .push-head .app {
+    width: 1.05rem; height: 1.05rem; border-radius: 5px; flex: none;
+    background: #1a5fd0; color: #fff; display: grid; place-items: center;
+  }
+  .push-head time { margin-left: auto; font-weight: 600; }
+  .push .subject { font-size: .92rem; font-weight: 700; margin-top: .35rem; }
+  .push .detail {
+    font: 400 .78rem/1.45 var(--sans); color: #56668a; margin-top: .12rem; white-space: pre-line;
+  }
+
+  /* ---- sections ----------------------------------------------------- */
+
+  section { padding: clamp(3.2rem, 7vw, 5rem) 0; }
+  section.tint-sun { background: var(--sun-pale); }
+  section.over { position: relative; z-index: 1; background: var(--paper); }
+  .head { display: flex; flex-direction: column; gap: .85rem; margin-bottom: 2.5rem; max-width: 34rem; }
+
+  .cards { display: grid; gap: 1.1rem; }
+  @media (min-width: 50rem) { .cards { grid-template-columns: repeat(3, 1fr); } }
+  .card {
+    background: var(--sky); border-radius: var(--r); padding: 1.6rem 1.5rem 1.7rem;
+    display: flex; flex-direction: column; gap: .55rem;
+  }
+  .card .icon { color: var(--blue); margin-bottom: .3rem; }
+  .card .clock {
+    font-size: 2.1rem; font-weight: 800; letter-spacing: -.035em; color: var(--blue);
+    font-variant-numeric: tabular-nums; line-height: 1;
+  }
+  .card p { color: var(--muted); font-size: .97rem; }
+  .card .fine {
+    margin-top: auto; padding-top: .9rem; font-size: .83rem; font-weight: 600; color: var(--muted);
+  }
+
+  /* ---- the flow: one step under the next, unlocked in order --------- */
+
+  .flow {
+    list-style: none; margin: 0; padding: 0; max-width: 40rem;
+    display: flex; flex-direction: column; gap: 1rem;
+  }
+  .flow-step {
+    background: var(--paper); border-radius: var(--r); padding: 1.4rem 1.5rem 1.5rem;
+    display: grid; grid-template-columns: 2.3rem minmax(0, 1fr); gap: 1rem;
+    align-items: start;
+  }
+  .flow-num {
+    width: 2.3rem; height: 2.3rem; border-radius: 999px; flex: none;
+    background: var(--sun); color: #14213a;
+    display: grid; place-items: center; font-weight: 800; font-size: 1.05rem;
+  }
+  .flow-num i { display: none; font-style: normal; }
+  .flow-body { min-width: 0; display: flex; flex-direction: column; gap: .55rem; align-items: flex-start; }
+  .aside-card {
+    margin-top: 1.6rem; max-width: 40rem; padding: 1.4rem 1.5rem;
+    border: 2px solid var(--sun); border-radius: var(--r);
+    display: flex; flex-direction: column; gap: .7rem;
+  }
+  .aside-card p { font-size: .95rem; color: var(--muted); }
+
+  .stores { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .store {
+    display: inline-flex; align-items: center; gap: .45rem;
+    padding: .5rem .9rem; border-radius: 999px; text-decoration: none;
+    border: 2px solid var(--sky-edge); background: var(--paper);
+    font-size: .92rem; font-weight: 600; color: var(--ink);
+  }
+  .store:hover { border-color: var(--blue); color: var(--blue); }
+  .store svg { flex: none; }
+  .step-hint { font-size: .95rem; color: var(--muted); }
+  .flow-body .btn { margin-top: .6rem; }
+  .btn-wide { padding-left: 2rem; padding-right: 2rem; font-size: 1.06rem; }
+
+  /* A step that is not its turn yet: visible, so people can see what is
+     coming, but plainly not actionable. */
+  .flow-step[data-state="todo"] { opacity: .48; }
+  .flow-step[data-state="todo"] .flow-num { background: var(--sky-edge); color: var(--muted); }
+  .flow-step[data-state="done"] .flow-num { background: var(--blue); color: #fff; }
+  .flow-step[data-state="done"] .flow-num b { display: none; }
+  .flow-step[data-state="done"] .flow-num i { display: block; }
+
+  /* ---- registration form -------------------------------------------- */
+
+  .signup {
+    margin-top: 2rem; background: var(--paper); border-radius: var(--r);
+    padding: clamp(1.4rem, 3vw, 2.1rem); max-width: 34rem;
+    display: flex; flex-direction: column; gap: 1.15rem;
+  }
+  .signup label.field { display: block; font-weight: 700; font-size: .95rem; margin-bottom: .4rem; }
+  .signup input[type=text] {
+    width: 100%; padding: .85rem 1rem; font: inherit; color: inherit;
+    background: var(--sky); border: 2px solid transparent; border-radius: 12px;
+  }
+  .signup input[type=text]:focus { outline: none; border-color: var(--blue); background: var(--paper); }
+  .signup fieldset { border: 0; margin: 0; padding: 0; }
+  .signup legend { font-weight: 700; font-size: .95rem; margin-bottom: .55rem; padding: 0; }
+  .pick {
+    display: grid; grid-template-columns: auto minmax(0, 1fr);
+    gap: .55rem .8rem; align-items: start;
+    padding: .85rem .9rem; border: 2px solid var(--sky); border-radius: 12px;
+  }
+  .pick label { cursor: pointer; }
+  .pick-when {
+    grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .7rem;
+  }
+  .pick-when label { font-size: .88rem; font-weight: 600; color: var(--muted); cursor: default; }
+  .pick-when input, .pick-when select {
+    padding: .42rem .55rem; font: inherit; font-size: .92rem; color: inherit;
+    background: var(--paper); border: 2px solid var(--sky-edge); border-radius: 9px;
+    font-variant-numeric: tabular-nums;
+  }
+  .pick-when input:focus, .pick-when select:focus { outline: none; border-color: var(--blue); }
+  /* Times for a mode you did not pick are still there, just clearly inactive. */
+  .pick:not(:has(input[type=checkbox]:checked)) .pick-when { opacity: .45; }
+
+  .pick + .pick { margin-top: .5rem; }
+  .pick:has(input[type=checkbox]:checked) { border-color: var(--blue); background: var(--sky); }
+  .pick > input[type=checkbox] { margin: 0; width: 1.15rem; height: 1.15rem; accent-color: var(--blue); flex: none; }
+  .pick-text { display: block; }
+  .pick-text strong { display: block; font-size: .97rem; }
+  .pick-text span { display: block; font-size: .88rem; color: var(--muted); }
+  .signup button { justify-content: center; }
+  .signup .err {
+    background: var(--err-bg); color: var(--err-ink); border-radius: 12px;
+    padding: .85rem 1rem; font-size: .95rem; font-weight: 600;
+  }
+  .signup .privacy { font-size: .87rem; color: var(--muted); }
+
+  .place-field { position: relative; }
+  .field-hint { font-size: .85rem; color: var(--muted); margin-top: .4rem; }
+  .field-hint.ok { color: var(--blue); font-weight: 600; }
+  .suggest {
+    position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% - 1.7rem);
+    margin: .3rem 0 0; padding: .3rem; list-style: none;
+    background: var(--paper); border: 2px solid var(--sky-edge); border-radius: 12px;
+    box-shadow: var(--shadow); max-height: 14rem; overflow-y: auto;
+  }
+  .suggest li {
+    padding: .55rem .7rem; border-radius: 8px; cursor: pointer; font-size: .95rem;
+  }
+  .suggest li:hover, .suggest li[aria-selected="true"] { background: var(--sky); }
+
+  /* ---- horizon ------------------------------------------------------ */
+
+  .horizon { display: flex; flex-direction: column; gap: 1.15rem; max-width: 42rem; }
+  .hrow { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: 1rem; align-items: center; }
+  .hname { font-size: .95rem; font-weight: 700; }
+  .hname span { display: block; font-weight: 400; font-size: .85rem; color: var(--muted); }
+  .hbar { position: relative; height: 1.5rem; margin-right: 4.5rem; }
+  .hbar i { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--bar-soft); }
+  .hbar.lead i { background: var(--blue); }
+  .hbar b {
+    position: absolute; top: 50%; transform: translateY(-50%); margin-left: .7rem;
+    font-size: .88rem; font-weight: 700; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  @media (max-width: 44rem) {
+    .hrow { grid-template-columns: minmax(0, 1fr); gap: .35rem; }
+  }
+
+  /* ---- self-hosting -------------------------------------------------- */
+
+  .host {
+    background: var(--ink); color: #f2f6ff; border-radius: 24px;
+    padding: clamp(1.75rem, 4vw, 2.75rem);
+    display: grid; gap: 2rem;
+  }
+  @media (min-width: 52rem) { .host { grid-template-columns: 1fr 1fr; align-items: center; } }
+  .host h2 { color: #ffffff; }
+  .host p { color: #b9c6e2; }
+  .host a:not(.btn) { color: var(--sun); }
+  .host pre {
+    margin: 0; padding: 1.15rem 1.25rem; overflow-x: auto; border-radius: 14px;
+    background: rgb(255 255 255 / .07); color: #eaf0ff;
+    font: 400 .87rem/1.8 var(--mono);
+  }
+  .host pre .c { color: #8fa2c8; }
+  .host .buttons { margin-top: 1.4rem; }
+  .host .btn-quiet { color: #ffffff; border-color: rgb(255 255 255 / .35); }
+  .host .btn-quiet:hover { border-color: var(--sun); color: var(--sun); }
+  code { font: 400 .89em var(--mono); }
+
+  /* ---- footer ------------------------------------------------------- */
+
+  footer { background: var(--sky); padding: 2.5rem 0 3rem; }
+  .foot { display: grid; gap: 1.2rem 2.5rem; font-size: .93rem; color: var(--muted); }
+  @media (min-width: 44rem) { .foot { grid-template-columns: repeat(3, 1fr); } }
+  .foot strong { display: block; color: var(--ink); font-size: .85rem; margin-bottom: .25rem; }
+</style>
+
+<header class="top">
+  <div class="page">
+    <span class="brand">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+        <path d="M11 2.6c2.9 4 4.4 6.7 4.4 8.5a4.4 4.4 0 1 1-8.8 0C6.6 9.3 8.1 6.6 11 2.6Z"
+              fill="currentColor"/>
+      </svg>
+      GleichNass
+    </span>
+    <nav>
+      <a href="#meldungen" class="hide-sm">Meldungen</a>
+      <a href="#mitmachen">Mitmachen</a>
+      <a href="#hosten">Selber hosten</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="page">
+    <div class="hero-copy">
+      <h1>Bekomme eine Nachricht, wenn es regnet.</h1>
+      <p class="lede">
+        <b>GleichNass</b> schaut ins Radar des Deutschen Wetterdienstes und
+        schickt dir eine Nachricht aufs Handy, bevor es bei dir losgeht.
+        Kostenlos, ohne Konto, ohne Werbung.
+      </p>
+      <div class="buttons">
+        <a class="btn btn-go" href="#mitmachen">Jetzt mitmachen</a>
+        <a class="btn btn-quiet" href="#hosten">Selber hosten</a>
+      </div>
+    </div>
+
+    <div class="phone" role="img"
+         aria-label="Handy-Sperrbildschirm mit zwei Meldungen von GleichNass:
+                     „Regen in 45 Min, Konstanz“ und „Regen heute Nacht, Konstanz“.">
+      <div class="screen">
+        <span class="notch" aria-hidden="true"></span>
+
+        <div class="lock">
+          <div class="t" id="clock-time">14:00</div>
+          <div class="d" id="clock-date">Montag, 17. August</div>
+        </div>
+
+        <div class="push">
+          <div class="push-head">
+            <span class="app" aria-hidden="true">
+              <svg width="9" height="9" viewBox="0 0 22 22">
+                <path d="M11 3.2c2.7 3.7 4.1 6.3 4.1 8a4.1 4.1 0 1 1-8.2 0c0-1.7 1.4-4.3 4.1-8Z"
+                      fill="currentColor"/>
+              </svg>
+            </span>
+            GleichNass
+            <time>jetzt</time>
+          </div>
+          <div class="subject">Regen in 45 Min</div>
+          <div class="detail">Konstanz
+ab <span id="onset-time">14:45</span> · 1.8 mm, Spitze 3.2 mm/h</div>
+        </div>
+
+        <div class="push">
+          <div class="push-head">
+            <span class="app" aria-hidden="true">
+              <svg width="9" height="9" viewBox="0 0 22 22">
+                <path d="M11 3.2c2.7 3.7 4.1 6.3 4.1 8a4.1 4.1 0 1 1-8.2 0c0-1.7 1.4-4.3 4.1-8Z"
+                      fill="currentColor"/>
+              </svg>
+            </span>
+            GleichNass
+            <time>gestern</time>
+          </div>
+          <div class="subject">Regen heute Nacht</div>
+          <div class="detail">Konstanz
+23:00–01:00 · 3.6 mm, Spitze 1.9 mm/h</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section id="meldungen" class="over">
+  <div class="page">
+    <div class="head">
+      <h2>Drei Meldungen. Du suchst dir aus, welche.</h2>
+      <p class="note">
+        Jede lässt sich einzeln an- und abschalten, Uhrzeiten und Zeitfenster
+        kannst du verschieben.
+      </p>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <span class="icon" aria-hidden="true">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round">
+            <path d="M12 2.8c3 4.2 4.6 7 4.6 8.8a4.6 4.6 0 1 1-9.2 0C7.4 9.8 9 7 12 2.8Z"
+                  fill="currentColor" stroke="none"/>
+            <path d="M4 20.5h3M10.5 20.5h3M17 20.5h3"/>
+          </svg>
+        </span>
+        <span class="clock">~1 Std</span>
+        <h3>Kurz vorher</h3>
+        <p>Alle 15 Minuten wird geprüft. Zieht Regen auf, kommt eine Meldung,
+          noch rechtzeitig um heimzukommen.</p>
+        <span class="fine">Jeder Schauer nur einmal</span>
+      </div>
+
+      <div class="card">
+        <span class="icon" aria-hidden="true">
+          <svg width="26" height="26" viewBox="0 0 24 24">
+            <path d="M17.2 14.6A6.8 6.8 0 0 1 9.4 6.8c0-.9.2-1.8.5-2.6a8 8 0 1 0 9.9 9.9
+                     c-.8.3-1.7.5-2.6.5Z" fill="currentColor"/>
+          </svg>
+        </span>
+        <span class="clock">20:00</span>
+        <h3>Am Abend</h3>
+        <p>Der Blick auf die Nacht. Fenster zu, Wäsche rein, Fahrrad
+          unterstellen, solange es noch trocken ist.</p>
+        <span class="fine">12 Stunden voraus</span>
+      </div>
+
+      <div class="card">
+        <span class="icon" aria-hidden="true">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round">
+            <circle cx="12" cy="12" r="4.2" fill="currentColor" stroke="none"/>
+            <path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2
+                     M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6"/>
+          </svg>
+        </span>
+        <span class="clock">08:00</span>
+        <h3>Am Morgen</h3>
+        <p>Dasselbe für den Tag: Reicht die Jacke, oder brauchst du den Schirm?</p>
+        <span class="fine">12 Stunden voraus</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="tint-sun" id="mitmachen">
+  <div class="page">
+    <div class="head">
+      <h2>In drei Schritten dabei</h2>
+      <p class="note">
+        Die Meldungen kommen über <a href="https://ntfy.sh">ntfy</a>, einen
+        freien und quelloffenen Push-Dienst. Keine E-Mail-Adresse, keine
+        Telefonnummer, kein Konto.
+      </p>
+    </div>
+
+    <ol class="flow">
+      <li class="flow-step" id="step-app" data-state="active">
+        <span class="flow-num" aria-hidden="true"><b>1</b><i>✓</i></span>
+        <div class="flow-body">
+          <h3>ntfy installieren</h3>
+          <p>Die kleine App, die die Meldungen entgegennimmt. Kostenlos,
+            quelloffen, ohne Konto.</p>
+<p class="stores">
+            <a class="store" href="https://apps.apple.com/us/app/ntfy/id1625396347"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.05 12.54c-.02-2.3 1.88-3.4 1.96-3.45-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.82-.81-2.99-.79-1.54.02-2.96.9-3.75 2.28-1.6 2.78-.41 6.89 1.15 9.14.76 1.1 1.67 2.34 2.86 2.29 1.15-.05 1.58-.74 2.97-.74 1.39 0 1.78.74 2.99.72 1.23-.02 2.01-1.12 2.76-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.39-.92-2.4-3.67Z"/><path d="M14.79 5.6c.63-.77 1.06-1.83.94-2.9-.91.04-2.01.61-2.66 1.37-.58.68-1.09 1.77-.95 2.81 1.01.08 2.05-.51 2.67-1.28Z"/></svg>iPhone</a>
+            <a class="store" href="https://play.google.com/store/apps/details?id=io.heckel.ntfy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11.5a5 5 0 0 1 10 0"/><path d="M7 11.5h10v5.2a1.3 1.3 0 0 1-1.3 1.3H8.3A1.3 1.3 0 0 1 7 16.7v-5.2Z"/><path d="M8.6 7.2 7.7 5.8M15.4 7.2l.9-1.4"/><circle cx="9.8" cy="9.6" r=".65" fill="currentColor" stroke="none"/><circle cx="14.2" cy="9.6" r=".65" fill="currentColor" stroke="none"/></svg>Android</a>
+            <a class="store" href="https://f-droid.org/packages/io.heckel.ntfy/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2 4.5 7v10L12 20.8 19.5 17V7L12 3.2Z"/><path d="M4.5 7 12 10.8 19.5 7M12 10.8v10"/></svg>F-Droid</a>
+          </p>
+          <button type="button" class="btn btn-go btn-wide" id="app-done">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m5 12.5 4.5 4.5L19 7.5"/>
+            </svg>
+            Habe ich installiert
+          </button>
+        </div>
+      </li>
+
+      <li class="flow-step" id="step-form" data-state="active">
+        <span class="flow-num" aria-hidden="true"><b>2</b><i>✓</i></span>
+        <div class="flow-body">
+          <h3>Anmelden</h3>
+          <p class="step-hint" id="form-hint">Sag uns, wo du bist und wann du
+            Bescheid bekommen möchtest.</p>
+
+          <form class="signup" id="anmelden" method="post" action="/signup">
+            <!--error-->
+            <div>
+              <label class="field" for="name">Wie heißt du?</label>
+              <input type="text" id="name" name="name" required autocomplete="name"
+                     placeholder="Didi" maxlength="60">
+            </div>
+            <div class="place-field">
+              <label class="field" for="place">Für welchen Ort?</label>
+              <input type="text" id="place" name="place" required
+                     placeholder="z. B. Konstanz" maxlength="80" autocomplete="off"
+                     role="combobox" aria-expanded="false" aria-autocomplete="list"
+                     aria-controls="place-list">
+              <ul class="suggest" id="place-list" role="listbox" hidden></ul>
+              <input type="hidden" name="lat" id="place-lat">
+              <input type="hidden" name="lon" id="place-lon">
+              <p class="field-hint" id="place-hint">Tippe los und wähle deinen Ort aus der Liste.</p>
+            </div>
+
+            <fieldset>
+              <legend>Welche Meldungen möchtest du?</legend>
+
+              <div class="pick">
+                <input type="checkbox" id="m-imminent" name="modes" value="imminent" checked>
+                <label class="pick-text" for="m-imminent">
+                  <strong>Kurz vorher</strong>
+                  <span>Sobald Regen aufzieht</span>
+                </label>
+                <span class="pick-when">
+                  <label for="w-imminent">Wie früh soll ich Bescheid sagen?</label>
+                  <select id="w-imminent" name="window_imminent">
+                    <option value="30m">30 Min</option>
+                    <option value="1h" selected>1 Std</option>
+                    <option value="2h">2 Std</option>
+                    <option value="3h">3 Std</option>
+                  </select>
+                </span>
+              </div>
+
+              <div class="pick">
+                <input type="checkbox" id="m-night" name="modes" value="night" checked>
+                <label class="pick-text" for="m-night">
+                  <strong>Abends</strong>
+                  <span>Regnet es über Nacht?</span>
+                </label>
+                <span class="pick-when">
+                  <label for="t-night">Wann soll ich die Nachricht schicken?</label>
+                  <input type="time" id="t-night" name="at_night" value="20:00" step="300">
+                </span>
+              </div>
+
+              <div class="pick">
+                <input type="checkbox" id="m-morning" name="modes" value="morning" checked>
+                <label class="pick-text" for="m-morning">
+                  <strong>Morgens</strong>
+                  <span>Regnet es tagsüber?</span>
+                </label>
+                <span class="pick-when">
+                  <label for="t-morning">Wann soll ich die Nachricht schicken?</label>
+                  <input type="time" id="t-morning" name="at_morning" value="08:00" step="300">
+                </span>
+              </div>
+              <!--telegram:start-->
+              <div class="pick">
+                <input type="checkbox" id="want-telegram" name="telegram" value="1">
+                <label class="pick-text" for="want-telegram">
+                  <strong>Auch per Telegram</strong>
+                  <span>Zusätzlich zur ntfy-App, über @gleichnass_bot.
+                    Im nächsten Schritt einmal antippen, fertig.</span>
+                </label>
+              </div>
+              <!--telegram:end-->
+            </fieldset>
+            <!--invite-->
+
+            <button class="btn btn-go" type="submit">Anmelden</button>
+            <p class="privacy">
+              Gespeichert wird nur dein Ort und was du hier auswählst. Keine
+              E-Mail, keine Telefonnummer, kein Passwort.
+            </p>
+          </form>
+        </div>
+      </li>
+
+      <li class="flow-step" id="step-test" data-state="todo">
+        <span class="flow-num" aria-hidden="true"><b>3</b><i>✓</i></span>
+        <div class="flow-body">
+          <h3>QR-Code scannen und testen</h3>
+          <p>Gleich nach dem Anmelden bekommst du einen QR-Code. Einmal mit dem
+            Handy scannen, Testnachricht schicken, fertig. Ab dann meldet sich
+            GleichNass von selbst.</p>
+        </div>
+      </li>
+    </ol>
+
+    <!--telegram:start-->
+    <div class="aside-card">
+      <h3>Lieber Telegram?</h3>
+      <p>
+        Wenn du Telegram sowieso nutzt, brauchst du gar keine neue App. Setz
+        oben den Haken bei „Auch per Telegram“. Nach dem Anmelden bekommst du
+        einen Knopf, der Telegram beim Bot öffnet und deinen Code abschickt.
+        Mehr ist es nicht: keine Chat-ID heraussuchen, kein Warten auf jemanden,
+        der dich freischaltet.
+      </p>
+      <p>
+        Beides gleichzeitig geht auch. Dann kommen die Meldungen auf die
+        ntfy-App <em>und</em> nach Telegram, etwa aufs Handy und aufs Tablet.
+      </p>
+    </div>
+    <!--telegram:end-->
+  </div>
+</section>
+
+<section id="daten">
+  <div class="page">
+    <div class="head">
+      <h2>Warum das so gut klappt</h2>
+      <p class="note">
+        Das Radar sagt nichts vorher. Es sieht, wo der Regen gerade wirklich
+        steht, auf einen Kilometer genau und alle fünf Minuten neu, und rechnet
+        aus, wohin er zieht. Für die nächste Stunde schlägt das jedes
+        Vorhersagemodell. Danach übernehmen die Modelle.
+      </p>
+    </div>
+
+    <div class="horizon">
+      <div class="hrow">
+        <span class="hname">DWD-Radar<span>sieht den Regen</span></span>
+        <span class="hbar lead"><i style="width:12.6%"></i><b style="left:12.6%">2 Std</b></span>
+      </div>
+      <div class="hrow">
+        <span class="hname">ICON-D2<span>DWD-Modell, 2 km</span></span>
+        <span class="hbar"><i style="width:70.6%"></i><b style="left:70.6%">2 Tage</b></span>
+      </div>
+      <div class="hrow">
+        <span class="hname">MET Norway<span>Zweitmeinung</span></span>
+        <span class="hbar"><i style="width:74.7%"></i><b style="left:74.7%">2,5 Tage</b></span>
+      </div>
+      <div class="hrow">
+        <span class="hname">MOSMIX<span>DWD-Stationen</span></span>
+        <span class="hbar"><i style="width:100%"></i><b style="left:100%">10 Tage</b></span>
+      </div>
+    </div>
+
+    <p class="note" style="margin-top:1.8rem">
+      Für jedes Zeitfenster nimmt GleichNass den Dienst, der wirklich so weit
+      sieht. Sagt einer nichts, wird das gemeldet. Ein Ausfall wird nie als
+      „bleibt trocken“ ausgegeben.
+    </p>
+  </div>
+</section>
+
+<section id="hosten">
+  <div class="page">
+    <div class="host">
+      <div>
+        <h2>Selber hosten</h2>
+        <p style="margin-top:.9rem">
+          GleichNass ist freie Software und läuft auf einem Raspberry Pi
+          genauso wie auf einem kleinen Server. Der Quellcode liegt auf
+          <a href="https://github.com/ribalba/gleichnass">GitHub</a>, unter
+          der AGPL-3.0.
+        </p>
+        <div class="buttons">
+          <a class="btn btn-quiet" href="https://github.com/ribalba/gleichnass">Zum Quellcode</a>
+        </div>
+      </div>
+      <div>
+        <pre><span class="c"># einmal einrichten</span>
+git clone https://github.com/ribalba/gleichnass
+cd gleichnass
+docker compose up -d</pre>
+        <p style="margin-top:1rem;font-size:.9rem">
+          Danach <code>gleichnass add-user --name "Didi" --place Konstanz</code>,
+          QR-Code scannen, fertig. Für Freunde gibt es eine Anmeldeseite, die
+          Thema und QR-Code selbst erzeugt.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="page foot">
+    <div>
+      <strong>Wetterdaten</strong>
+      <a href="https://www.dwd.de">Deutscher Wetterdienst</a>, über
+      <a href="https://brightsky.dev">Bright Sky</a> und
+      <a href="https://open-meteo.com">Open-Meteo</a>. Zweitmeinung von
+      <a href="https://www.met.no">MET Norway</a>.
+    </div>
+    <div>
+      <strong>Zustellung</strong>
+      <a href="https://ntfy.sh">ntfy</a>, freier Push-Dienst für Android und
+      iPhone.
+    </div>
+    <div>
+      <strong>Daten über dich</strong>
+      Nur dein Ort und die gewählten Zeiten. Keine Konten, keine Tracker, keine
+      Weitergabe.
+    </div>
+  </div>
+</footer>
+
+<script>
+  // The phone shows the visitor's own clock, and the first alert is dated 45
+  // minutes ahead of it, so the example stays coherent whenever it is read.
+  // The markup carries sensible fixed values for the no-JavaScript case.
+  (function () {
+    const time = document.getElementById('clock-time');
+    const date = document.getElementById('clock-date');
+    const onset = document.getElementById('onset-time');
+    if (!time || !date || !onset) return;
+
+    const days = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+    const months = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli',
+                    'August', 'September', 'Oktober', 'November', 'Dezember'];
+    const pad = (n) => String(n).padStart(2, '0');
+    const clock = (d) => pad(d.getHours()) + ':' + pad(d.getMinutes());
+
+    function tick() {
+      const now = new Date();
+      time.textContent = clock(now);
+      date.textContent = days[now.getDay()] + ', ' + now.getDate() + '. ' + months[now.getMonth()];
+      onset.textContent = clock(new Date(now.getTime() + 45 * 60000));
+    }
+
+    tick();
+    setInterval(tick, 10000);
+  })();
+
+  // Step 2 waits for step 1. Progressive enhancement on purpose: the form is
+  // enabled in the markup, and only this script locks it, so the page still
+  // works with no JavaScript at all.
+  (function () {
+    const app = document.getElementById('step-app');
+    const step = document.getElementById('step-form');
+    const form = document.getElementById('anmelden');
+    const button = document.getElementById('app-done');
+    const hint = document.getElementById('form-hint');
+    if (!app || !step || !form || !button) return;
+
+    const controls = form.querySelectorAll('input, select, button');
+    const waiting = 'Erst Schritt 1: installiere ntfy und bestätige es oben.';
+    const ready = hint ? hint.textContent : '';
+
+    function lock(locked) {
+      step.dataset.state = locked ? 'todo' : 'active';
+      controls.forEach((c) => { c.disabled = locked; });
+      if (hint) hint.textContent = locked ? waiting : ready;
+    }
+
+    // A rejected submission comes back with the form filled in and an error on
+    // it; re-locking there would trap someone who has already got this far.
+    if (!form.querySelector('.err')) lock(true);
+
+    button.addEventListener('click', function () {
+      app.dataset.state = 'done';
+      button.disabled = true;
+      button.textContent = 'Erledigt';
+      lock(false);
+      document.getElementById('name').focus({ preventScroll: true });
+      step.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  })();
+
+  // Place autocomplete. Suggestions come from our own /places endpoint, which
+  // proxies the geocoder, so the page never talks to a third party. Picking one
+  // stores its coordinates, which is what makes the chosen place unambiguous;
+  // typing freely still works, and the server resolves and checks it on submit.
+  (function () {
+    const input = document.getElementById('place');
+    const list = document.getElementById('place-list');
+    const lat = document.getElementById('place-lat');
+    const lon = document.getElementById('place-lon');
+    const hint = document.getElementById('place-hint');
+    if (!input || !list || !lat || !lon || !hint) return;
+
+    const idle = hint.textContent;
+    let items = [];
+    let active = -1;
+    let timer = null;
+
+    function close() {
+      list.hidden = true;
+      input.setAttribute('aria-expanded', 'false');
+      input.removeAttribute('aria-activedescendant');
+      active = -1;
+    }
+
+    function forget() {
+      lat.value = '';
+      lon.value = '';
+      hint.textContent = idle;
+      hint.classList.remove('ok');
+    }
+
+    function highlight(next) {
+      const options = list.querySelectorAll('li');
+      if (!options.length) return;
+      active = (next + options.length) % options.length;
+      options.forEach((li, i) => li.setAttribute('aria-selected', i === active));
+      input.setAttribute('aria-activedescendant', options[active].id);
+      options[active].scrollIntoView({ block: 'nearest' });
+    }
+
+    function choose(index) {
+      const place = items[index];
+      if (!place) return;
+      input.value = place.name;
+      lat.value = place.lat;
+      lon.value = place.lon;
+      hint.textContent = 'Ort erkannt: ' + place.name;
+      hint.classList.add('ok');
+      close();
+    }
+
+    function render() {
+      list.textContent = '';
+      items.forEach(function (place, i) {
+        const li = document.createElement('li');
+        li.textContent = place.name;
+        li.id = 'place-option-' + i;
+        li.setAttribute('role', 'option');
+        li.setAttribute('aria-selected', 'false');
+        // mousedown, not click: blur would close the list first.
+        li.addEventListener('mousedown', function (event) {
+          event.preventDefault();
+          choose(i);
+        });
+        list.appendChild(li);
+      });
+      list.hidden = items.length === 0;
+      input.setAttribute('aria-expanded', items.length ? 'true' : 'false');
+      active = -1;
+    }
+
+    function search(query) {
+      fetch('/places?q=' + encodeURIComponent(query))
+        .then(function (response) { return response.ok ? response.json() : []; })
+        .then(function (found) { items = found; render(); })
+        // No suggestions is not an error: the server still resolves and checks
+        // whatever was typed when the form is submitted.
+        .catch(function () { items = []; close(); });
+    }
+
+    input.addEventListener('input', function () {
+      forget();
+      clearTimeout(timer);
+      const query = input.value.trim();
+      if (query.length < 2) { items = []; close(); return; }
+      timer = setTimeout(function () { search(query); }, 220);
+    });
+
+    input.addEventListener('keydown', function (event) {
+      if (list.hidden) return;
+      if (event.key === 'ArrowDown') { event.preventDefault(); highlight(active + 1); }
+      else if (event.key === 'ArrowUp') { event.preventDefault(); highlight(active - 1); }
+      else if (event.key === 'Enter' && active >= 0) { event.preventDefault(); choose(active); }
+      else if (event.key === 'Escape') { close(); }
+    });
+
+    input.addEventListener('blur', function () { setTimeout(close, 120); });
+  })();
+</script>

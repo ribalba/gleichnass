@@ -1,0 +1,15 @@
+[Unit]
+Description=Run gleichnass every five minutes
+
+[Timer]
+# Every rule decides for itself whether it is due, so this only has to tick
+# more often than the shortest rule interval. Five minutes is plenty for a
+# fifteen-minute imminent watch.
+OnCalendar=*:0/5
+# Catch up after a reboot or a suspend; the rules' grace windows stop anything
+# stale from being delivered.
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

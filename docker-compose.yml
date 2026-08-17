@@ -1,0 +1,64 @@
+# GleichNass: the whole thing, in one file.
+#
+# Two containers off the same image, sharing one volume:
+#   site    serves the website and takes registrations
+#   melder  checks the weather and sends the notifications
+#
+# There is no cron and no scheduler to set up. The melder loops on its own, and
+# each rule works out for itself whether it is due, so a missed tick or a
+# restart costs nothing.
+#
+# There is no reverse proxy in here either. Coolify (or Traefik, Caddy, nginx,
+# a tunnel) terminates TLS and routes to `site` on port 8080.
+#
+#   docker compose up -d
+
+services:
+  site:
+    build: .
+    restart: unless-stopped
+    # --trust-proxy: every request arrives from the proxy, so the client
+    # address has to come from X-Forwarded-For or rate limiting would put
+    # the whole internet in one bucket. Drop it if you expose this directly.
+    command: gleichnass -v serve --host 0.0.0.0 --port 8080 --trust-proxy
+    expose:
+      - "8080"
+    # Running plain Docker with nothing in front? Uncomment to reach it
+    # directly. On Coolify leave this out and set the domain in the UI, so its
+    # proxy handles the routing.
+    # ports:
+    #   - "8080:8080"
+    volumes:
+      - gleichnass-data:/data
+    environment:
+      # On Coolify this asks for a generated domain; elsewhere it is unset and
+      # simply does nothing.
+      - SERVICE_FQDN_SITE_8080
+      - GLEICHNASS_CONFIG=/data/gleichnass.yaml
+      # Optional: require an invite code instead of open registration.
+      - GLEICHNASS_INVITE_CODE=${GLEICHNASS_INVITE_CODE:-}
+      # Optional: only needed if anyone uses Telegram.
+      - GLEICHNASS_TELEGRAM_TOKEN=${GLEICHNASS_TELEGRAM_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8080/healthz')"]
+      interval: 1m
+      timeout: 10s
+      start_period: 20s
+
+  melder:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - gleichnass-data:/data
+    environment:
+      - GLEICHNASS_CONFIG=/data/gleichnass.yaml
+      # How often to look. Every rule still decides for itself whether it is
+      # due, so this only has to tick faster than the shortest rule interval.
+      - GLEICHNASS_INTERVAL=300
+      - GLEICHNASS_TELEGRAM_TOKEN=${GLEICHNASS_TELEGRAM_TOKEN:-}
+
+volumes:
+  # Config, users.d/ and the SQLite state. This is the only thing to back up,
+  # and the only thing that must survive a redeploy.
+  gleichnass-data:

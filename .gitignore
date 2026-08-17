@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+dist/
+
+# Anything a local run leaves behind. Real deployments keep all of this in a
+# Docker volume, but running from a checkout drops it here.
+/data/
+/users.d/
+/gleichnass.yaml
+*.sqlite3
