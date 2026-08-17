@@ -202,6 +202,25 @@ self-contained file: no external fonts, scripts, images or network requests, and
 it works in light and dark. The two hooks the server fills in are HTML comments,
 so opening the file directly still renders the finished page.
 
+## Leaving
+
+**ntfy cannot tell us that somebody unsubscribed in the app.** Publishing to a
+topic with no subscribers returns 200 and says nothing about who is listening,
+so an unsubscribe there is invisible from this side. Two mechanisms cover it:
+
+- **Every notification carries an unsubscribe link**, as an ntfy action button
+  and as a line of text on Telegram. Following it asks first and only removes
+  the person on the confirmation, since chat apps and mail clients follow links
+  to preview them and a link that deleted on sight would go off by itself.
+  This needs `signup.base_url`, because a notification has no way of knowing
+  what this deployment is called.
+- **Telegram does report a block**, unlike ntfy. A `403 blocked`, a deactivated
+  account or a missing chat drops that channel rather than failing on it every
+  five minutes, and a user with no channels left is removed entirely.
+
+`gleichnass remove-user <id-or-name>` does the same by hand. Either way the
+user's file is the whole record, so deleting it is the whole job.
+
 ## Providers
 
 All free, keyless, no account.

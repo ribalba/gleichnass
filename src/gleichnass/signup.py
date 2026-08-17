@@ -7,6 +7,7 @@ rather than being written twice.
 from __future__ import annotations
 
 import re
+import secrets
 import unicodedata
 import uuid
 from dataclasses import dataclass
@@ -138,6 +139,9 @@ def create(
         "language": language or config.defaults["language"],
         "timezone": timezone or config.defaults["timezone"],
         "channels": channels,
+        # Their own key for leaving. ntfy cannot tell us that someone
+        # unsubscribed in the app, so the only way out is one they can take.
+        "unsubscribe": secrets.token_urlsafe(12),
         "rules": [rule_entry(preset, (options or {}).get(preset)) for preset in presets],
     }
     if telegram_code:

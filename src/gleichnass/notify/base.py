@@ -16,6 +16,8 @@ class Notification:
     """1 (min) to 5 (max), following ntfy's scale; other channels map onto it."""
     tags: list[str] = field(default_factory=list)
     click: str | None = None
+    actions: list[dict] = field(default_factory=list)
+    """ntfy action buttons. Other channels render what they can of these."""
 
 
 class Channel(Protocol):

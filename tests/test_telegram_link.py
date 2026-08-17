@@ -126,3 +126,18 @@ def test_nothing_waiting_means_the_bot_is_not_called(project):
 
     client = httpx.Client(transport=httpx.MockTransport(boom))
     assert telegram_link.link_waiting(config, client, "bot-token") == []
+
+
+def test_linking_rewrites_the_file_the_user_came_from(project):
+    """A hand-named file must not be duplicated under an id-derived name:
+    two files with one id stop the whole config from loading."""
+    original = project.parent / "users.d" / "anna.yaml"
+    original.write_text(WAITING.replace("id: anna", "id: 1234-5678"))
+    config = config_module.load(project)
+
+    telegram_link.link_waiting(config, bot_saw("/start ABC123"), "bot-token")
+
+    assert original.exists(), "still the same file"
+    assert not (project.parent / "users.d" / "1234-5678.yaml").exists()
+    reloaded = config_module.load(project)          # would raise on a duplicate
+    assert [c.type for c in reloaded.user("1234-5678").channels] == ["ntfy", "telegram"]

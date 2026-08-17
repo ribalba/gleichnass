@@ -280,3 +280,100 @@ def test_a_configured_base_url_wins():
     handler._base_url = web.Handler._base_url.__get__(handler)
     config = SimpleNamespace(signup=SimpleNamespace(base_url="https://gleichnass.de/"))
     assert handler._base_url(config) == "https://gleichnass.de"
+
+
+def test_the_telegram_step_offers_a_qr_as_well_as_a_link():
+    """The confirmation page is usually on a computer; Telegram is on a phone."""
+    import segno
+
+    entry = {"id": "u", "name": "Didi", "rules": [{"preset": "night"}]}
+    page = web.welcome(entry, "topic", "https://x.test/abo/topic", "Konstanz",
+                       telegram_bot="GleichNass_bot", code="ABC123")
+
+    link = "https://t.me/GleichNass_bot?start=ABC123"
+    assert link in page, "the button, for when the page is already on the phone"
+    expected = segno.make(link, error="m").svg_inline(
+        scale=4, dark="#14213a", light="#ffffff"
+    )
+    assert expected in page, "and a QR encoding the same link"
+    assert "/start ABC123" in page, "and the code to type as a last resort"
+
+
+def test_there_is_no_telegram_step_without_a_bot():
+    entry = {"id": "u", "name": "Didi", "rules": [{"preset": "night"}]}
+    page = web.welcome(entry, "topic", "https://x.test/abo/topic", "Konstanz")
+    assert "t.me/" not in page
+
+
+UNSUB = """
+id: 11111111-2222-3333-4444-555555555555
+name: Anna
+location: {lat: 53.55, lon: 9.99}
+channels: [{type: ntfy, topic: abc}]
+unsubscribe: leave-me-alone
+rules: [{preset: night}]
+"""
+
+
+def test_a_notification_carries_a_way_out(project):
+    """ntfy never reports an unsubscribe, so the only way anyone can leave is a
+    link they were given."""
+    from gleichnass import message as message_module
+
+    (project.parent / "users.d" / "anna.yaml").write_text(UNSUB)
+    project.write_text(BASE + "signup:\n  base_url: https://gleichnass.de\n")
+    anna = config_module.load(project).user("11111111-2222-3333-4444-555555555555")
+
+    assert anna.unsubscribe_url == (
+        "https://gleichnass.de/abbestellen"
+        "?u=11111111-2222-3333-4444-555555555555&t=leave-me-alone"
+    )
+    action = message_module._leaving(anna, message_module.texts("de"))[0]
+    assert action["label"] == "Abmelden"
+    assert action["url"] == anna.unsubscribe_url
+
+
+def test_without_a_base_url_there_is_no_link_to_offer(project):
+    from gleichnass import message as message_module
+
+    (project.parent / "users.d" / "anna.yaml").write_text(UNSUB)
+    anna = config_module.load(project).user("11111111-2222-3333-4444-555555555555")
+    assert anna.unsubscribe_url == ""
+    assert message_module._leaving(anna, message_module.texts("de")) == []
+
+
+def test_leaving_deletes_the_whole_record(project):
+    (project.parent / "users.d" / "anna.yaml").write_text(UNSUB)
+    config = config_module.load(project)
+    anna = config.user("11111111-2222-3333-4444-555555555555")
+
+    assert config_module.delete_user(config, anna)
+    assert not (project.parent / "users.d" / "anna.yaml").exists()
+
+
+def test_a_blocked_telegram_chat_is_dropped_but_ntfy_survives(project):
+    (project.parent / "users.d" / "anna.yaml").write_text(
+        UNSUB.replace("channels: [{type: ntfy, topic: abc}]",
+                      "channels: [{type: ntfy, topic: abc}, "
+                      "{type: telegram, chat_id: 42, token: t}]")
+    )
+    config = config_module.load(project)
+    anna = config.user("11111111-2222-3333-4444-555555555555")
+
+    assert config_module.drop_channel(config, anna, "telegram", "42")
+    left = config_module.load(project).user("11111111-2222-3333-4444-555555555555")
+    assert [c.type for c in left.channels] == ["ntfy"]
+
+
+def test_losing_the_last_channel_removes_the_user(project):
+    (project.parent / "users.d" / "anna.yaml").write_text(
+        UNSUB.replace("channels: [{type: ntfy, topic: abc}]",
+                      "channels: [{type: telegram, chat_id: 42, token: t}]")
+    )
+    config = config_module.load(project)
+    anna = config.user("11111111-2222-3333-4444-555555555555")
+
+    assert config_module.drop_channel(config, anna, "telegram", "42")
+    assert not (project.parent / "users.d" / "anna.yaml").exists(), (
+        "nothing left to deliver to, so nothing left to keep"
+    )

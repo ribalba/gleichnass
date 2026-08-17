@@ -36,6 +36,7 @@ TEXTS = {
         "rule_morning": "Jeden Morgen um {at}, für den Tag",
         "rule_daily": "Jeden Tag um {at}",
         "rule_bullet": "· {line}",
+        "unsubscribe": "Abmelden",
     },
     "en": {
         "rain_in": "Rain in {delta}",
@@ -60,6 +61,7 @@ TEXTS = {
         "rule_morning": "Every morning at {at}, for the day",
         "rule_daily": "Every day at {at}",
         "rule_bullet": "· {line}",
+        "unsubscribe": "Unsubscribe",
     },
 }
 
@@ -83,12 +85,15 @@ def render(
         end = verdict.outlooks[0].covered_until if verdict.outlooks else now
         return Notification(
             title=words["dry_window"].format(label=label),
-            body="\n".join(
-                [place, words["dry_until"].format(end=_clock(end, zone)), _footer(words, verdict, zone)]
-            ),
+            body="\n".join([
+                place,
+                words["dry_until"].format(end=_clock(end, zone)),
+                _footer(words, verdict, zone),
+            ]),
             priority=2,
             tags=["sun_with_face"],
             click=user.click_url or None,
+            actions=_leaving(user, words),
         )
 
     lead = verdict.leading
@@ -123,6 +128,7 @@ def render(
         priority=4 if imminent else 3,
         tags=["umbrella"],
         click=user.click_url or None,
+        actions=_leaving(user, words),
     )
 
 
@@ -161,6 +167,18 @@ def test_notification(user) -> Notification:
         tags=["white_check_mark"],
         click=user.click_url or None,
     )
+
+
+def _leaving(user, words: dict) -> list[dict]:
+    """A way out, carried by every notification.
+
+    ntfy never tells us that someone unsubscribed in the app, so a link they
+    can use themselves is the only way anyone can actually leave.
+    """
+    url = getattr(user, "unsubscribe_url", "")
+    if not url:
+        return []
+    return [{"action": "view", "label": words["unsubscribe"], "url": url, "clear": False}]
 
 
 def _footer(words: dict, verdict: Consensus, zone: tzinfo) -> str:

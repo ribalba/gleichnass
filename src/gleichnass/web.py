@@ -180,26 +180,42 @@ def landing(error: str = "", invite_needed: bool = False,
 
 
 def welcome(entry: dict, topic: str, topic_url: str, place: str,
-            telegram_bot: str | None = None, code: str | None = None) -> str:
+            telegram_bot: str | None = None, code: str | None = None,
+            leave_url: str = "") -> str:
     qr = segno.make(topic_url, error="m").svg_inline(scale=4, dark="#14213a", light="#ffffff")
     telegram_step = ""
     if telegram_bot and code:
         link = telegram_link.deep_link(telegram_bot, code)
+        # A QR as well as a button: this page is usually open on a computer,
+        # while Telegram is on the phone. t.me links open the app on both
+        # Android and iOS, so unlike the ntfy one this code needs no fallback.
+        tg_qr = segno.make(link, error="m").svg_inline(
+            scale=4, dark="#14213a", light="#ffffff"
+        )
         telegram_step = f"""<div>
     <strong>3. Telegram verbinden</strong>
     <p class="privacy" style="margin-top:.3rem">
-      Tippe auf den Knopf: Telegram öffnet sich beim Bot und schickt deinen
-      Code ab. Innerhalb weniger Minuten bekommst du die Meldungen auch dort.
+      Scanne diesen Code mit dem Handy: Telegram öffnet sich beim Bot und
+      schickt deinen Code ab. Wenige Minuten später kommen die Meldungen auch dort an.
     </p>
-    <p style="margin-top:.7rem">
-      <a class="btn btn-quiet" href="{html.escape(link)}">@{html.escape(telegram_bot)} öffnen</a>
+    <div style="background:#fff;border-radius:14px;padding:1.1rem;margin-top:.7rem;
+                display:flex;justify-content:center">
+      <div style="width:190px">{tg_qr}</div>
+    </div>
+    <p style="margin-top:.9rem">
+      <a class="btn btn-quiet" href="{html.escape(link)}">Direkt @{html.escape(telegram_bot)} öffnen</a>
     </p>
     <p class="privacy" style="margin-top:.7rem">
-      Geht das nicht, schreibe dem Bot von Hand:
+      Geht beides nicht, schreibe dem Bot von Hand:
       <code>/start {html.escape(code)}</code>
     </p>
   </div>"""
     modes = "".join(f"<li>{html.escape(describe_rule(rule))}</li>" for rule in entry["rules"])
+    leave_note = ""
+    if leave_url:
+        leave_note = (
+            f'<a href="{html.escape(leave_url)}">Wieder abmelden</a> &nbsp;·&nbsp; '
+        )
     return f"""
 <h1 style="margin-bottom:.8rem">Fast geschafft, {html.escape(entry['name'])}.</h1>
 <p class="lede">Noch zwei Handgriffe auf dem Handy, dann meldet sich
@@ -241,7 +257,7 @@ def welcome(entry: dict, topic: str, topic_url: str, place: str,
   </form>
 </div>
 
-<p class="note" style="margin-top:1.5rem"><a href="/">Zurück zur Startseite</a></p>
+<p class="note" style="margin-top:1.5rem">{leave_note}<a href="/">Zurück zur Startseite</a></p>
 """
 
 
@@ -363,6 +379,8 @@ class Handler(BaseHTTPRequestHandler):
             if not self.settings["browse"].allow(self._client()):
                 return self._send(429, b"[]", "application/json; charset=utf-8")
             self._places(parse_qs(urlparse(self.path).query).get("q", [""])[0])
+        elif route == "/abbestellen":
+            self._leave_form(parse_qs(urlparse(self.path).query))
         elif route.startswith("/abo/"):
             self._subscribe(route[len("/abo/"):], parse_qs(urlparse(self.path).query))
         elif route == "/healthz":
@@ -377,6 +395,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._signup()
             elif route == "/test":
                 self._test()
+            elif route == "/abbestellen":
+                self._leave()
             else:
                 self._not_found()
         except BadRequest as error:
@@ -394,6 +414,56 @@ class Handler(BaseHTTPRequestHandler):
         ).rstrip("/")
         label = (query.get("ort", [""])[0] or "GleichNass")[:40]
         self._send(200, _shell("Abo einrichten", subscribe_page(topic, label, server)))
+
+    def _leaving(self, query: dict):
+        """Whoever this link belongs to, if the token really is theirs."""
+        config = self._config()
+        try:
+            user = config.user(query.get("u", [""])[0])
+        except KeyError:
+            return None, config
+        token = query.get("t", [""])[0]
+        if not user.unsubscribe or not _same_secret(token, user.unsubscribe):
+            return None, config
+        return user, config
+
+    def _leave_form(self, query: dict):
+        """A GET only asks. Mail clients and chat apps follow links to preview
+        them, and a link that deletes on sight would go off by itself."""
+        user, _ = self._leaving(query)
+        if user is None:
+            return self._not_found()
+        fields = "".join(
+            f'<input type="hidden" name="{k}" value="{html.escape(query[k][0])}">'
+            for k in ("u", "t")
+        )
+        self._send(200, _shell("Abmelden", f"""
+<h1 style="margin-bottom:.8rem">Abmelden?</h1>
+<p class="lede">Dann hört GleichNass für {html.escape(user.name)} auf, sich zu
+   melden, und alles Gespeicherte wird gelöscht.</p>
+<form method="post" action="/abbestellen" class="signup" style="margin-top:1.8rem">
+  {fields}
+  <button class="btn btn-go" type="submit" style="justify-content:center">
+    Ja, abmelden
+  </button>
+  <p class="privacy">Du kannst dich jederzeit wieder anmelden.</p>
+</form>
+<p class="note" style="margin-top:1.5rem"><a href="/">Doch nicht</a></p>"""))
+
+    def _leave(self):
+        user, config = self._leaving(self._form())
+        if user is None:
+            return self._not_found()
+
+        config_module.delete_user(config, user)
+        with Store(config.state_path) as store:
+            store.forget(user.id)
+        log.info("removed %s on their own request", user.id)
+        self._send(200, _shell("Abgemeldet", """
+<h1 style="margin-bottom:.8rem">Erledigt.</h1>
+<p class="lede">Du bekommst keine Meldungen mehr, und deine Daten sind gelöscht.
+   In der ntfy-App kannst du das Thema jetzt auch dort entfernen.</p>
+<p class="note" style="margin-top:1.5rem"><a href="/">Zur Startseite</a></p>"""))
 
     def _base_url(self, config) -> str:
         """Where this site is reachable, for the URL inside the QR code."""
@@ -515,7 +585,10 @@ class Handler(BaseHTTPRequestHandler):
             _shell(
                 "Fast geschafft",
                 welcome(created.entry, created.topic, qr_target, where,
-                        telegram_bot=bot, code=code),
+                        telegram_bot=bot, code=code,
+                        leave_url=f"{self._base_url(config)}/abbestellen"
+                                  f"?u={quote(created.entry['id'])}"
+                                  f"&t={quote(created.entry['unsubscribe'])}"),
             ),
         )
 

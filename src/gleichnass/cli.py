@@ -23,6 +23,7 @@ import httpx
 
 from . import config as config_module
 from . import geocode, message, notify, providers, signup, telegram_link, web
+from .notify.telegram import bot_username as telegram_bot_username
 from .analyze import Outlook, Threshold, analyze
 from .config import ConfigError
 from .models import Location
@@ -331,6 +332,12 @@ def _add_users(subcommands) -> None:
     _config_argument(linking)
     linking.set_defaults(handler=_telegram_link)
 
+    checking = subcommands.add_parser(
+        "check", help="report what this deployment is actually configured to do"
+    )
+    _config_argument(checking)
+    checking.set_defaults(handler=_check)
+
     starter = subcommands.add_parser("init", help="write a starter config")
     _config_argument(starter)
     starter.set_defaults(handler=_init)
@@ -524,6 +531,46 @@ def _telegram_ids(args) -> int:
     return 0
 
 
+def _check(args) -> int:
+    """What the running service sees, so nobody has to guess why a feature is off."""
+    config = config_module.load(args.config)
+    print(f"config      {args.config}")
+    print(f"state       {config.state_path}")
+    print(f"users       {len(config.users)} in {config.users_dir}")
+
+    signup_cfg = config.signup
+    if not signup_cfg.enabled:
+        print("signup      closed (signup.enabled is false)")
+    elif signup_cfg.invite_code:
+        shown = signup_cfg.invite_code
+        looks_like_token = ":" in shown and len(shown) > 30
+        note = "  <- this looks like a bot token, not an invite code" if looks_like_token else ""
+        print(f"signup      open, invite code required ({len(shown)} characters){note}")
+    else:
+        print(f"signup      open to anyone, {signup_cfg.per_hour}/h per address")
+
+    ntfy = (config.defaults["channels"].get("ntfy") or {}).get("server", "https://ntfy.sh")
+    print(f"ntfy        {ntfy}")
+
+    token = _telegram_token(config)
+    if not token:
+        print("telegram    off, no bot token")
+        print("            set GLEICHNASS_TELEGRAM_TOKEN to switch it on")
+    else:
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                name = telegram_bot_username(client, token)
+            print(f"telegram    on, @{name}")
+        except Exception as error:  # noqa: BLE001
+            print(f"telegram    token rejected by Telegram: {error}")
+            return 1
+
+    waiting = telegram_link.pending(config)
+    if waiting:
+        print(f"            {len(waiting)} waiting to be linked")
+    return 0
+
+
 def _init(args) -> int:
     target = Path(args.config)
     if target.exists():
@@ -567,6 +614,9 @@ def _serve(args) -> int:
         print("registration: closed (signup.enabled is false)")
     if args.trust_proxy:
         print("client address: from X-Forwarded-For (reverse proxy assumed)")
+    bot = web.telegram_bot_for(config)
+    print(f"telegram: @{bot}" if bot
+          else "telegram: off (set GLEICHNASS_TELEGRAM_TOKEN to offer it)")
     web.serve(args.config, host=args.host, port=args.port,
               per_hour=config.signup.per_hour, trust_proxy=args.trust_proxy)
     return 0

@@ -50,6 +50,11 @@ signup:
   enabled: true
   title: GleichNass
 
+  # The public address of this site. Worth setting: notifications can only
+  # carry an unsubscribe link if they know where to point, and ntfy never
+  # tells us that somebody unsubscribed in the app.
+  # base_url: https://gleichnass.de
+
   # Registration is open. Set an invite code to narrow it to people you gave
   # the code to, or leave it unset for anyone with the link.
   # invite_code: ${GLEICHNASS_INVITE_CODE}

@@ -97,5 +97,5 @@ def _attach(config: Config, user_id: str, chat_id: int) -> bool:
 
     channels.append({"type": "telegram", "chat_id": chat_id})
     entry["channels"] = channels
-    write_user(config.users_dir, entry)
+    write_user(config.users_dir, entry, user.path)
     return True

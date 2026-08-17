@@ -14,12 +14,14 @@ from datetime import UTC, datetime
 
 import httpx
 
+from . import config as config_module
 from . import notify, providers
 from .analyze import Consensus, Outlook, analyze, consensus
 from .config import Config, User
 from .message import render
 from .models import Forecast, Location
 from .notify import Notification
+from .notify.telegram import Blocked
 from .rules import Rule
 from .state import Store
 
@@ -134,6 +136,16 @@ def _handle(config, store, client, user, rule, forecasts, now, dry_run) -> Decis
     for channel in channels:
         try:
             channel.send(client, notification)
+        except Blocked as error:
+            # They blocked the bot. Nothing will ever arrive again, so stop
+            # carrying the channel rather than failing on it every tick.
+            message = f"{channel.type}: blocked ({error})"
+            log.info("dropping blocked channel for %s: %s", user.id, error)
+            errors.append(message)
+            if not dry_run:
+                config_module.drop_channel(
+                    config, user, "telegram", getattr(channel, "chat_id", "")
+                )
         except Exception as error:  # noqa: BLE001
             message = f"{channel.type}: {type(error).__name__}: {error}"
             log.error("delivery to %s failed: %s", user.id, message)

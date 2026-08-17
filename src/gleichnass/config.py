@@ -11,6 +11,7 @@ import os
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 import yaml
@@ -61,6 +62,9 @@ class User:
     side by side."""
     rules: list[Rule]
     click_url: str = ""
+    unsubscribe: str = ""
+    """Token proving a request to be removed really came from this person."""
+    unsubscribe_url: str = ""
     path: Path | None = None
     """The file this user came from, so `remove-user` knows what to delete."""
 
@@ -132,12 +136,29 @@ def load(path: str | Path) -> Config:
     signup_raw = raw.get("signup") or {}
     signup = Signup(
         enabled=bool(signup_raw.get("enabled", True)),
-        invite_code=expand_env(signup_raw.get("invite_code")) or None,
+        # The environment wins on its own. The generated config carries this
+        # line commented out, so requiring the YAML to mention it meant setting
+        # the documented variable quietly did nothing.
+        invite_code=(
+            expand_env(signup_raw.get("invite_code"))
+            or os.environ.get("GLEICHNASS_INVITE_CODE", "")
+            or None
+        ),
         per_hour=int(signup_raw.get("per_hour", 8)),
         telegram_bot=(signup_raw.get("telegram_bot") or "").lstrip("@") or None,
         base_url=(signup_raw.get("base_url") or "").rstrip("/"),
         title=signup_raw.get("title") or "GleichNass",
     )
+
+    # Notifications can only carry a way out if we know what this deployment
+    # is called, which is why signup.base_url is worth setting.
+    if signup.base_url:
+        for user in users:
+            if user.unsubscribe:
+                user.unsubscribe_url = (
+                    f"{signup.base_url}/abbestellen"
+                    f"?u={quote(user.id)}&t={quote(user.unsubscribe)}"
+                )
 
     return Config(path, users_dir, state_path, defaults, users, signup)
 
@@ -238,14 +259,54 @@ def _build_user(entry: dict, defaults: dict, source: Path) -> User:
         click_url=(entry.get("click_url") or defaults["click_url"]).format(
             lat=location.lat, lon=location.lon
         ),
+        unsubscribe=str(entry.get("unsubscribe") or ""),
         path=source,
     )
 
 
-def write_user(users_dir: Path, entry: dict) -> Path:
-    """Persist one user as their own YAML file, atomically."""
+def delete_user(config: "Config", user: "User") -> bool:
+    """Remove someone entirely. Their file is the whole record."""
+    if user.path is None or user.path == config.path:
+        return False
+    user.path.unlink(missing_ok=True)
+    return True
+
+
+def drop_channel(config: "Config", user: "User", channel_type: str, key: str) -> bool:
+    """Take one dead channel off a user, and remove them if none are left.
+
+    Telegram tells us when someone blocks the bot, and there is no point
+    holding a chat id that can never be delivered to again.
+    """
+    if user.path is None or user.path == config.path:
+        return False
+    entry = yaml.safe_load(user.path.read_text(encoding="utf-8")) or {}
+    specs = entry.get("channels")
+    if specs is None:
+        specs = [entry.pop("channel")] if entry.get("channel") else []
+
+    kept = [
+        spec for spec in specs
+        if not (spec.get("type") == channel_type and str(spec.get("chat_id", "")) == str(key))
+    ]
+    if len(kept) == len(specs):
+        return False
+    if not kept:
+        return delete_user(config, user)
+    entry["channels"] = kept
+    write_user(config.users_dir, entry, user.path)
+    return True
+
+
+def write_user(users_dir: Path, entry: dict, path: Path | None = None) -> Path:
+    """Persist one user as their own YAML file, atomically.
+
+    Rewrites pass the file the user was read from. Deriving the name from the
+    id instead would leave a hand-named file behind next to a new one, and two
+    files with the same id stop the whole config from loading.
+    """
     users_dir.mkdir(parents=True, exist_ok=True)
-    target = users_dir / f"{entry['id']}.yaml"
+    target = path or users_dir / f"{entry['id']}.yaml"
     body = yaml.safe_dump(entry, allow_unicode=True, sort_keys=False)
     handle, temporary = tempfile.mkstemp(dir=users_dir, suffix=".tmp")
     try:

@@ -201,3 +201,20 @@ def test_shared_channel_settings_are_expanded_too(project, monkeypatch):
 def test_an_unset_variable_leaves_no_empty_shared_setting(project):
     defaults = config_module.load(project).defaults["channels"]
     assert "token" not in defaults.get("telegram", {})
+
+
+def test_the_invite_code_can_come_from_the_environment_alone(project, monkeypatch):
+    """The generated config keeps that line commented out, so requiring the
+    YAML to mention it made the documented variable a no-op."""
+    monkeypatch.setenv("GLEICHNASS_INVITE_CODE", "regen2026")
+    assert config_module.load(project).signup.invite_code == "regen2026"
+
+
+def test_the_yaml_still_wins_when_it_names_one(project, monkeypatch):
+    monkeypatch.setenv("GLEICHNASS_INVITE_CODE", "from-env")
+    project.write_text(BASE + "signup:\n  invite_code: from-yaml\n")
+    assert config_module.load(project).signup.invite_code == "from-yaml"
+
+
+def test_no_code_anywhere_means_open_registration(project):
+    assert config_module.load(project).signup.invite_code is None

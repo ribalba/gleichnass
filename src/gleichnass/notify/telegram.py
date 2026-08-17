@@ -17,6 +17,11 @@ from .base import Notification
 API = "https://api.telegram.org"
 
 
+class Blocked(Exception):
+    """The person blocked the bot, or the chat is gone. They will never get
+    another message, so the channel should be dropped rather than retried."""
+
+
 class TelegramChannel:
     type = "telegram"
 
@@ -37,16 +42,26 @@ class TelegramChannel:
         return f"telegram chat {self.chat_id}"
 
     def send(self, client: httpx.Client, notification: Notification) -> None:
+        text = f"{notification.title}\n{notification.body}"
+        # Telegram has no action buttons here, so the links go in the text.
+        for action in notification.actions:
+            if action.get("url"):
+                text += f"\n{action.get('label', 'Link')}: {action['url']}"
         response = client.post(
             f"{self.server}/bot{self.token}/sendMessage",
             json={
                 "chat_id": self.chat_id,
-                "text": f"{notification.title}\n{notification.body}",
+                "text": text,
                 # Telegram has no priority; a low-priority note arrives silently.
                 "disable_notification": notification.priority <= 2,
                 "link_preview_options": {"is_disabled": True},
             },
         )
+        if response.status_code in (400, 403):
+            detail = str(response.json().get("description", "")).lower()
+            if any(w in detail for w in ("blocked", "deactivated", "chat not found",
+                                          "kicked", "user is deactivated")):
+                raise Blocked(detail)
         response.raise_for_status()
 
 

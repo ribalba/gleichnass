@@ -54,6 +54,8 @@ class NtfyChannel:
             payload["tags"] = notification.tags
         if notification.click:
             payload["click"] = notification.click
+        if notification.actions:
+            payload["actions"] = notification.actions
 
         headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
         response = client.post(self.server, json=payload, headers=headers)
