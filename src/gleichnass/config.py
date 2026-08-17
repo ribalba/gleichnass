@@ -159,7 +159,14 @@ def _shared_channels(raw_defaults: dict, defaults: dict) -> dict[str, dict]:
 
     for channel_type, settings in (raw_defaults.get("channels") or {}).items():
         shared[channel_type] = {**shared.get(channel_type, {}), **(settings or {})}
-    return shared
+
+    # Expand here, once, so everything downstream sees real values. Doing it
+    # only per user left the shared settings holding a literal "${VAR}", which
+    # anything reading the defaults directly then used verbatim.
+    return {
+        name: {k: v for k, v in expand_env(settings).items() if v != ""}
+        for name, settings in shared.items()
+    }
 
 
 def _read_yaml(path: Path) -> dict:

@@ -50,6 +50,17 @@ class TelegramChannel:
         response.raise_for_status()
 
 
+def bot_username(client: httpx.Client, token: str, server: str = API) -> str | None:
+    """Ask Telegram who this token belongs to.
+
+    Saves anyone from configuring the bot's name a second time next to the
+    token, and doubles as a check that the token is actually valid.
+    """
+    response = client.get(f"{server}/bot{token}/getMe", timeout=8.0)
+    response.raise_for_status()
+    return (response.json().get("result") or {}).get("username")
+
+
 def recent_messages(client: httpx.Client, token: str, server: str = API) -> list[dict]:
     """Recent inbound messages as {text, chat_id, chat}.
 

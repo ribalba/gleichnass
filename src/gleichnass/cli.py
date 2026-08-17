@@ -56,6 +56,10 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.INFO if args.verbose else logging.WARNING,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    # httpx logs every request URL at INFO, and a Telegram URL carries the bot
+    # token in its path. Nothing that useful is worth putting a secret in the
+    # log of a service that runs with -v.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     try:
         return args.handler(args)
     except ConfigError as error:

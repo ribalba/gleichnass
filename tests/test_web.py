@@ -1,5 +1,7 @@
 """The public site: registration is open, so the guard rails matter."""
 
+from types import SimpleNamespace
+
 import pytest
 
 from gleichnass import config as config_module
@@ -99,7 +101,7 @@ def test_the_welcome_page_shows_the_topic_and_a_scannable_code():
     assert "regen-secret" in page
     assert "<svg" in page, "the QR code is rendered inline, not fetched"
     assert "Hamburg" in page
-    assert "Abends um 20:00" in page
+    assert "Jeden Abend um 20:00" in page, "same wording as the notification itself"
 
 
 def test_telegram_is_offered_only_where_a_bot_is_configured():
@@ -198,3 +200,83 @@ def test_two_people_with_one_name_are_reported_not_guessed(project):
         cli.resolve_user(config, "Alex")
     # ...but each is still reachable by their own id.
     assert cli.resolve_user(config, "00000001").name == "Alex"
+
+
+def test_the_qr_page_opens_the_app_rather_than_a_web_page():
+    """A QR that lands in a browser is the thing this page exists to avoid."""
+    page = web.subscribe_page("gleichnass-abc", "Konstanz", "https://ntfy.sh")
+
+    assert "ntfy://ntfy.sh/gleichnass-abc?display=Konstanz" in page
+    assert "location.replace" in page, "Android is forwarded straight into the app"
+    assert "/Android/i" in page, "and only Android, since iOS has no ntfy:// handler"
+
+
+def test_the_qr_page_still_works_where_the_deep_link_does_not():
+    page = web.subscribe_page("gleichnass-abc", "Konstanz", "https://ntfy.sh")
+    assert "gleichnass-abc" in page, "the topic, to type in by hand"
+    assert "https://ntfy.sh/gleichnass-abc" in page, "and the web app as a last resort"
+
+
+def test_a_self_hosted_http_server_is_flagged_as_insecure_in_the_deep_link():
+    page = web.subscribe_page("t", "Ort", "http://ntfy.example.test")
+    assert "ntfy://ntfy.example.test/t?display=Ort&secure=false" in page
+
+
+def test_the_telegram_bot_is_read_from_the_token(monkeypatch):
+    """Setting only the token used to leave Telegram silently switched off."""
+    calls = []
+
+    def fake_username(client, token, server="https://api.telegram.org"):
+        calls.append(token)
+        return "GleichNass_bot"
+
+    monkeypatch.setattr(web, "bot_username", fake_username)
+    web._BOT_NAMES.clear()
+
+    config = SimpleNamespace(
+        signup=SimpleNamespace(telegram_bot=None),
+        defaults={"channels": {"telegram": {"token": "12345:secret"}}},
+    )
+    assert web.telegram_bot_for(config) == "GleichNass_bot"
+    assert web.telegram_bot_for(config) == "GleichNass_bot"
+    assert calls == ["12345:secret"], "asked once, then remembered"
+
+
+def test_no_token_means_no_telegram(monkeypatch):
+    monkeypatch.setattr(web, "bot_username", lambda *a, **k: pytest.fail("should not ask"))
+    config = SimpleNamespace(
+        signup=SimpleNamespace(telegram_bot=None), defaults={"channels": {}}
+    )
+    assert web.telegram_bot_for(config) is None
+
+
+def test_the_qr_encodes_our_own_subscribe_url():
+    """The target is inside the QR modules, not the page text, so compare it
+    against an independently generated code for the URL we expect."""
+    import segno
+
+    target = "https://gleichnass.de/abo/gleichnass-abc?ort=Konstanz"
+    entry = {"id": "u", "name": "Didi", "rules": [{"preset": "night"}]}
+    page = web.welcome(entry, "gleichnass-abc", target, "Konstanz")
+
+    expected = segno.make(target, error="m").svg_inline(
+        scale=4, dark="#14213a", light="#ffffff"
+    )
+    assert expected in page
+
+
+def test_the_public_url_comes_from_the_proxy_headers():
+    handler = FakeRequest(
+        {"trust_proxy": True},
+        {"Host": "gleichnass.de", "X-Forwarded-Proto": "https"},
+    )
+    handler._base_url = web.Handler._base_url.__get__(handler)
+    config = SimpleNamespace(signup=SimpleNamespace(base_url=""))
+    assert handler._base_url(config) == "https://gleichnass.de"
+
+
+def test_a_configured_base_url_wins():
+    handler = FakeRequest({"trust_proxy": True}, {"Host": "internal:8080"})
+    handler._base_url = web.Handler._base_url.__get__(handler)
+    config = SimpleNamespace(signup=SimpleNamespace(base_url="https://gleichnass.de/"))
+    assert handler._base_url(config) == "https://gleichnass.de"

@@ -99,8 +99,30 @@ def test_english_works_too():
 
 
 @pytest.mark.parametrize("language", ["de", "en"])
-def test_the_test_notification_explains_what_was_signed_up_for(language):
+def test_the_test_notification_lists_the_alerts_in_plain_words(language):
+    """It lands on a lock screen, so no preset names and no intervals."""
     note = message_module.test_notification(person(language))
-    assert "night" in note.body and "imminent" in note.body
-    assert "20:00" in note.body
-    assert ":00" not in note.body.split("night")[1].split("\n")[0].replace("20:00", "")
+
+    assert "20:00" in note.body, "the time they chose is the useful part"
+    for jargon in ("imminent", "preset:", "window", "15 Min", "alle 15"):
+        assert jargon not in note.body
+
+
+def test_the_watch_is_described_by_what_it_does_not_how_it_polls():
+    assert message_module.describe("imminent", language="de") == "Immer wenn es gleich regnet"
+    assert message_module.describe("imminent", language="en") == (
+        "Whenever rain is about to start"
+    )
+
+
+def test_a_digest_names_its_own_time():
+    assert message_module.describe("night", "21:30", "de") == "Jeden Abend um 21:30, für die Nacht"
+    assert message_module.describe("morning", "06:45", "de") == "Jeden Morgen um 06:45, für den Tag"
+
+
+def test_a_rule_without_an_explicit_time_falls_back_to_the_preset():
+    assert message_module.describe("night", None, "de") == "Jeden Abend um 20:00, für die Nacht"
+
+
+def test_a_hand_written_rule_still_gets_a_sentence():
+    assert message_module.describe("bike-commute", "07:30", "de") == "Jeden Tag um 07:30"

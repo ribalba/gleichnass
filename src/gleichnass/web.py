@@ -23,7 +23,7 @@ from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Lock
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 import httpx
 import segno
@@ -34,6 +34,7 @@ from . import config as config_module
 from . import geocode, message, notify, providers, signup, telegram_link
 from .models import Location
 from .rules import PRESETS
+from .notify.telegram import bot_username
 from .state import Store
 
 log = logging.getLogger("gleichnass.web")
@@ -45,6 +46,91 @@ TEMPLATE_BOT = "gleichnass_bot"
 # Long, because places do not move. Not unlimited, so a name that was
 # missing from the geocoder one day can turn up later.
 PLACE_CACHE_AGE = timedelta(days=90)
+
+# A bot's username never changes, so ask Telegram once per token and keep it.
+_BOT_NAMES: dict[str, str | None] = {}
+_BOT_LOCK = Lock()
+
+
+def telegram_bot_for(config) -> str | None:
+    """The bot to offer, worked out from the token rather than configured twice.
+
+    Setting the token used not to be enough: the site also wanted the bot's
+    name in the config file, which lives inside the deployment's volume, so a
+    token set in the environment quietly did nothing.
+    """
+    if config.signup.telegram_bot:
+        return config.signup.telegram_bot
+
+    token = (config.defaults["channels"].get("telegram") or {}).get("token") or ""
+    if not token:
+        return None
+
+    with _BOT_LOCK:
+        if token in _BOT_NAMES:
+            return _BOT_NAMES[token]
+    try:
+        with httpx.Client(timeout=8.0) as client:
+            name = bot_username(client, token)
+    except Exception as error:  # noqa: BLE001
+        log.warning("could not identify the Telegram bot: %s", error)
+        name = None
+    with _BOT_LOCK:
+        _BOT_NAMES[token] = name
+    if name:
+        log.info("Telegram enabled as @%s", name)
+    return name
+
+
+TOPIC_OK = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def subscribe_page(topic: str, label: str, server: str) -> str:
+    """The page the QR code leads to, whose whole job is to open the app.
+
+    Scanning a plain https://ntfy.sh/<topic> link lands in a browser, which is
+    not what anyone wants from a QR code. ntfy has a deep link that opens the
+    app and subscribes in one step, but it is Android only, so pointing the QR
+    straight at it would leave iPhones with a dead scan. Hence this page:
+    Android is sent on to the app immediately, everyone else gets the topic and
+    somewhere to put it.
+    """
+    host = server.split("://", 1)[-1].rstrip("/")
+    insecure = "&secure=false" if server.startswith("http://") else ""
+    deep = f"ntfy://{host}/{topic}?display={quote(label)}{insecure}"
+    web_url = f"{server.rstrip('/')}/{topic}"
+    return f"""
+<h1 style="margin-bottom:.8rem">Abo einrichten</h1>
+<p class="lede">Gleich hast du es. Wenn sich die ntfy-App nicht von selbst
+   öffnet, hilft einer der Wege hier.</p>
+
+<div class="signup" style="margin-top:1.8rem">
+  <a class="btn btn-go" style="justify-content:center" href="{html.escape(deep)}">
+    In der ntfy-App öffnen
+  </a>
+  <div>
+    <strong>iPhone, oder es klappt nicht?</strong>
+    <p class="privacy" style="margin-top:.3rem">
+      ntfy öffnen, auf <em>+</em> tippen und dieses Thema eintragen:
+    </p>
+    <p style="margin-top:.5rem"><code>{html.escape(topic)}</code></p>
+  </div>
+  <div>
+    <strong>Lieber im Browser?</strong>
+    <p class="privacy" style="margin-top:.3rem">
+      <a href="{html.escape(web_url)}">{html.escape(web_url)}</a>
+    </p>
+  </div>
+</div>
+
+<script>
+  // Only Android registers the ntfy:// scheme. Trying it on iOS raises an
+  // "address is invalid" dialog, so there it is left as a button instead.
+  if (/Android/i.test(navigator.userAgent)) {{
+    location.replace({json.dumps(deep)});
+  }}
+</script>
+"""
 
 
 def _template() -> str:
@@ -129,13 +215,14 @@ def welcome(entry: dict, topic: str, topic_url: str, place: str,
           </p>
   </div>
   <div>
-    <strong>2. Diesen Code mit dem Handy scannen</strong>
+    <strong>2. Code scannen, die App öffnet sich</strong>
     <div style="background:#fff;border-radius:14px;padding:1.1rem;margin-top:.7rem;
                 display:flex;justify-content:center">
       <div style="width:190px">{qr}</div>
     </div>
     <p class="privacy" style="margin-top:.7rem">
-      Klappt das Scannen nicht, abonniere in der App von Hand das Thema
+      Auf Android landest du direkt in ntfy und bist abonniert. Auf dem iPhone
+      öffnet sich eine Seite mit deinem Thema, das du in der App einträgst:
       <code>{html.escape(topic)}</code>.
       Wer diesen Namen kennt, sieht deine Meldungen, also bitte nicht öffentlich teilen.
     </p>
@@ -196,17 +283,9 @@ def _forecast_reaches(client, config, location: Location) -> bool:
     return False
 
 
-def describe_rule(rule: dict) -> str:
-    """The rule in the person's own words, with the time they picked."""
-    preset = rule.get("preset")
-    if preset == "imminent":
-        window = rule.get("window", "1h")
-        return f"Eine Meldung, sobald in {_WINDOW_WORDS.get(window, window)} Regen aufzieht"
-    if preset == "night":
-        return f"Abends um {rule.get('at', '20:00')}, wenn es über Nacht regnet"
-    if preset == "morning":
-        return f"Morgens um {rule.get('at', '08:00')}, wenn es tagsüber regnet"
-    return str(preset)
+def describe_rule(rule: dict, language: str = "de") -> str:
+    """The rule as a sentence, worded once in message.py and reused here."""
+    return message.describe(rule.get("preset", ""), rule.get("at"), language)
 
 
 class BadRequest(Exception):
@@ -278,12 +357,14 @@ class Handler(BaseHTTPRequestHandler):
             config = self._config()
             self._send(200, landing(
                 invite_needed=bool(config.signup.invite_code),
-                telegram_bot=config.signup.telegram_bot,
+                telegram_bot=telegram_bot_for(config),
             ))
         elif route == "/places":
             if not self.settings["browse"].allow(self._client()):
                 return self._send(429, b"[]", "application/json; charset=utf-8")
             self._places(parse_qs(urlparse(self.path).query).get("q", [""])[0])
+        elif route.startswith("/abo/"):
+            self._subscribe(route[len("/abo/"):], parse_qs(urlparse(self.path).query))
         elif route == "/healthz":
             self._send(200, b"ok", "text/plain; charset=utf-8")
         else:
@@ -302,6 +383,27 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, _shell("Ungültige Anfrage", f"<h1>{html.escape(str(error))}</h1>"))
 
     # -- actions ---------------------------------------------------------
+
+    def _subscribe(self, topic: str, query: dict):
+        """Where the QR code points. Opens the app rather than a web page."""
+        if not TOPIC_OK.match(topic):
+            return self._not_found()
+        config = self._config()
+        server = str(
+            (config.defaults["channels"].get("ntfy") or {}).get("server") or "https://ntfy.sh"
+        ).rstrip("/")
+        label = (query.get("ort", [""])[0] or "GleichNass")[:40]
+        self._send(200, _shell("Abo einrichten", subscribe_page(topic, label, server)))
+
+    def _base_url(self, config) -> str:
+        """Where this site is reachable, for the URL inside the QR code."""
+        if config.signup.base_url:
+            return config.signup.base_url.rstrip("/")
+        host = self.headers.get("Host", "")
+        scheme = "http"
+        if self.settings.get("trust_proxy"):
+            scheme = self.headers.get("X-Forwarded-Proto", "https").split(",")[0].strip()
+        return f"{scheme}://{host}"
 
     def _places(self, query: str):
         """Place suggestions, proxied so the page never calls anyone else, and
@@ -378,7 +480,8 @@ class Handler(BaseHTTPRequestHandler):
                     else "Bitte eine gültige Uhrzeit angeben."
                 ))
 
-        wants_telegram = bool(form.get("telegram")) and bool(config.signup.telegram_bot)
+        bot = telegram_bot_for(config)
+        wants_telegram = bool(form.get("telegram")) and bool(bot)
         code = telegram_link.new_code() if wants_telegram else None
         picked = _picked_location(form, place)
 
@@ -404,13 +507,15 @@ class Handler(BaseHTTPRequestHandler):
         server = str(
             config.defaults["channels"].get("ntfy", {}).get("server") or "https://ntfy.sh"
         ).rstrip("/")
+        # The QR points at our own /abo page, which forwards into the app.
+        where = created.location.name or place
+        qr_target = f"{self._base_url(config)}/abo/{created.topic}?ort={quote(where[:40])}"
         self._send(
             200,
             _shell(
                 "Fast geschafft",
-                welcome(created.entry, created.topic, f"{server}/{created.topic}",
-                        created.location.name or place,
-                        telegram_bot=config.signup.telegram_bot, code=code),
+                welcome(created.entry, created.topic, qr_target, where,
+                        telegram_bot=bot, code=code),
             ),
         )
 
@@ -483,7 +588,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _reject(self, config, error: str):
         self._send(400, landing(error, bool(config.signup.invite_code),
-                                config.signup.telegram_bot))
+                                telegram_bot_for(config)))
 
     def _not_found(self):
         self._send(404, _shell("Nicht gefunden", '<h1>Nicht gefunden</h1>'

@@ -327,6 +327,15 @@ config file.
   is served locally: about 4 ms instead of 200 ms, and well inside Open-Meteo's
   limits. Empty answers are not cached, since an empty list usually means the
   geocoder was unreachable rather than that the place does not exist.
+- **The QR code opens the app, not a web page.** It points at `/abo/<topic>` on
+  this site, which forwards into ntfy's `ntfy://` deep link so the app opens and
+  subscribes in one step. That scheme is Android only, so iPhones are shown the
+  topic to enter instead; pointing the QR straight at `ntfy://` would give them
+  a dead scan.
+- **The Telegram bot is identified from its token**, via `getMe`. Setting the
+  token used not to be enough: the site also wanted the bot's name in the config
+  file, which lives inside the deployment's volume, so a token in the
+  environment quietly did nothing.
 - **Only the ntfy topic can trigger a test notification.** Ids used to be first
   names, so `/test` was something a stranger could aim at someone else's phone.
   The topic is the secret handed out at signup, and anyone holding it could

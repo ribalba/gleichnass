@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, tzinfo
 
 from .analyze import Consensus
 from .notify import Notification
-from .rules import Rule
+from .rules import PRESETS, Rule
 
 TEXTS = {
     "de": {
@@ -29,11 +29,13 @@ TEXTS = {
         "minutes": "{count} Min",
         "hours": "{hours}:{minutes:02d} Std",
         "hours_round": "{hours} Std",
-        "test_title": "GleichNass funktioniert",
-        "test_body": "Diese Benachrichtigung kam von deinem GleichNass.\n{rules}",
-        "rule_line": "{name}: {trigger}, {window} voraus",
-        "daily_at": "täglich um {at}",
-        "every": "alle {every}",
+        "test_title": "Whoooo, es funktioniert!",
+        "test_body": "Ab jetzt meldet sich GleichNass bei dir:\n{rules}",
+        "rule_imminent": "Immer wenn es gleich regnet",
+        "rule_night": "Jeden Abend um {at}, für die Nacht",
+        "rule_morning": "Jeden Morgen um {at}, für den Tag",
+        "rule_daily": "Jeden Tag um {at}",
+        "rule_bullet": "· {line}",
     },
     "en": {
         "rain_in": "Rain in {delta}",
@@ -51,11 +53,13 @@ TEXTS = {
         "minutes": "{count} min",
         "hours": "{hours}:{minutes:02d} h",
         "hours_round": "{hours} h",
-        "test_title": "GleichNass works",
-        "test_body": "This notification came from your GleichNass.\n{rules}",
-        "rule_line": "{name}: {trigger}, looking {window} ahead",
-        "daily_at": "daily at {at}",
-        "every": "every {every}",
+        "test_title": "Whoooo, it works!",
+        "test_body": "From now on GleichNass will tell you:\n{rules}",
+        "rule_imminent": "Whenever rain is about to start",
+        "rule_night": "Every evening at {at}, for the night",
+        "rule_morning": "Every morning at {at}, for the day",
+        "rule_daily": "Every day at {at}",
+        "rule_bullet": "· {line}",
     },
 }
 
@@ -122,17 +126,31 @@ def render(
     )
 
 
+def describe(preset: str, at: str | None = None, language: str = "de") -> str:
+    """One rule, in the words a person would use.
+
+    The one place this wording lives: the same sentence goes into the test
+    notification and onto the confirmation page, so they cannot drift apart.
+    """
+    words = texts(language)
+    if preset == "imminent":
+        return words["rule_imminent"]
+    # A hand-written rule may leave the time implied; fall back to the preset's
+    # own default rather than printing a question mark at somebody.
+    at = at or (PRESETS.get(preset) or {}).get("at") or "?"
+    key = f"rule_{preset}" if f"rule_{preset}" in words else "rule_daily"
+    return words[key].format(at=at)
+
+
 def test_notification(user) -> Notification:
     words = texts(user.language)
     rules = "\n".join(
-        words["rule_line"].format(
-            name=rule.name,
-            trigger=(
-                words["daily_at"].format(at=rule.at.strftime("%H:%M"))
-                if rule.at
-                else words["every"].format(every=_span(words, rule.every))
-            ),
-            window=_span(words, rule.window),
+        words["rule_bullet"].format(
+            line=describe(
+                rule.name,
+                rule.at.strftime("%H:%M") if rule.at else None,
+                user.language,
+            )
         )
         for rule in user.rules
     )

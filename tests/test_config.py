@@ -186,3 +186,18 @@ def test_signup_rejects_an_unknown_mode(project):
         signup.create(
             config, name="Anna", location=Location(1, 2), presets=["whenever"], client=client
         )
+
+
+def test_shared_channel_settings_are_expanded_too(project, monkeypatch):
+    """Not only the per-user copies: anything reading the defaults directly
+    would otherwise get a literal "${VAR}"."""
+    monkeypatch.setenv("TEST_TELEGRAM_TOKEN", "12345:secret")
+    defaults = config_module.load(project).defaults["channels"]
+
+    assert defaults["telegram"]["token"] == "12345:secret"
+    assert "${" not in str(defaults)
+
+
+def test_an_unset_variable_leaves_no_empty_shared_setting(project):
+    defaults = config_module.load(project).defaults["channels"]
+    assert "token" not in defaults.get("telegram", {})
