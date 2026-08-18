@@ -35,8 +35,12 @@ DEFAULTS = {
     "channels": {"ntfy": {"server": "https://ntfy.sh"}},
     # Assumed when a user names a channel without stating its type.
     "channel_type": "ntfy",
-    # Tapping the notification should open something useful on a phone.
-    "click_url": "https://www.windy.com/-Rain-thunder-rain?rain,{lat},{lon},9",
+    # Tapping the notification should open something useful on a phone. The
+    # coordinates go in the path rather than a query string, because Ventusky
+    # resolves them server-side and names the place: the page says "Konstanz"
+    # where Windy only parsed the query in JavaScript, and so left anyone
+    # following the link from an app staring at a map centred elsewhere.
+    "click_url": "https://www.ventusky.com/de/{lat};{lon}",
 }
 
 

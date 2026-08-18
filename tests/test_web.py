@@ -420,3 +420,89 @@ def test_the_page_declares_a_viewport():
     """Without it a phone lays the page out at 980px and zooms out, so none of
     the mobile styling applies."""
     assert 'name="viewport"' in web.landing().decode()
+
+
+# -- one screen or two ----------------------------------------------------
+
+
+def test_the_browser_is_taken_at_its_word_about_what_it_runs_on():
+    assert web.platform_of("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)") == "ios"
+    assert web.platform_of("Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X)") == "ios"
+    assert web.platform_of("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile") == "android"
+    assert web.platform_of("Mozilla/5.0 (Linux; U) Mobile Safari") == "mobile"
+    assert web.platform_of("Mozilla/5.0 (X11; Linux x86_64) Chrome/126") == "desktop"
+    assert web.platform_of("") == "desktop", "a page still has to render without one"
+
+
+def test_a_phone_gets_a_button_where_a_computer_gets_a_code():
+    """Scanning a code with the device it is displayed on is not a thing."""
+    entry = {"id": "u", "name": "Didi", "rules": [{"preset": "night"}]}
+    args = (entry, "gleichnass-abc", "https://x.test/abo/gleichnass-abc", "Konstanz")
+
+    phone = web.welcome(*args, platform="android")
+    assert 'class="segno"' not in phone, "no QR code on the screen doing the scanning"
+    assert "ntfy://ntfy.sh/gleichnass-abc?display=Konstanz" in phone
+
+    computer = web.welcome(*args, platform="desktop")
+    assert 'class="segno"' in computer
+    assert "https://x.test/abo/gleichnass-abc" in computer, "and a link for a touch iPad"
+
+
+def test_the_iphone_is_never_shown_a_link_it_cannot_follow():
+    """iOS registers no ntfy:// handler: tapping it raises an error dialog."""
+    entry = {"id": "u", "name": "Didi", "rules": [{"preset": "night"}]}
+    page = web.welcome(entry, "gleichnass-abc", "https://x.test/abo/gleichnass-abc",
+                       "Konstanz", platform="ios")
+    assert "ntfy://" not in page
+    assert 'data-copy="gleichnass-abc"' in page, "one tap to the clipboard instead"
+    assert "https://ntfy.sh/gleichnass-abc" in page, "and the web app, which needs no app"
+
+    scanned = web.subscribe_page("gleichnass-abc", "Konstanz", "https://ntfy.sh", "ios")
+    assert "ntfy://" not in scanned
+    assert "location.replace" not in scanned, "and nothing forwarding into a dead scheme"
+    assert 'data-copy="gleichnass-abc"' in scanned
+
+
+def test_an_unknown_device_is_still_offered_everything():
+    """Guessing wrong should never take an option away."""
+    page = web.subscribe_page("t", "Ort", "https://ntfy.sh")
+    assert "ntfy://" in page and "data-copy" in page and "https://ntfy.sh/t" in page
+
+
+def test_a_phone_is_only_shown_the_shop_it_can_install_from():
+    assert "apps.apple.com" in web.store_links("ios")
+    assert "play.google" not in web.store_links("ios")
+    assert "f-droid" in web.store_links("android")
+    assert "apps.apple.com" not in web.store_links("android")
+    for shop in ("apps.apple.com", "play.google", "f-droid"):
+        assert shop in web.store_links("desktop")
+
+
+def test_the_landing_page_stops_talking_about_scanning_on_a_phone():
+    phone = web.landing(platform="ios").decode()
+    assert "QR-Code scannen und testen" not in phone
+    assert "Abonnieren und testen" in phone
+    assert "play.google" not in phone, "including in the install step"
+
+    computer = web.landing(platform="desktop").decode()
+    assert "QR-Code scannen und testen" in computer
+
+
+def test_telegram_is_a_button_on_a_phone_and_a_code_on_a_computer():
+    entry = {"id": "u", "name": "Didi", "rules": [{"preset": "night"}]}
+    args = (entry, "topic", "https://x.test/abo/topic", "Konstanz")
+    link = "https://t.me/GleichNass_bot?start=ABC123"
+
+    phone = web.welcome(*args, telegram_bot="GleichNass_bot", code="ABC123", platform="ios")
+    assert link in phone
+    assert 'class="segno"' not in phone
+
+    computer = web.welcome(*args, telegram_bot="GleichNass_bot", code="ABC123")
+    assert link in computer
+    assert 'class="segno"' in computer
+
+
+def test_the_handler_asks_the_request_who_is_looking():
+    request = FakeRequest({}, {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)"})
+    request._platform = web.Handler._platform.__get__(request)
+    assert request._platform() == "ios"

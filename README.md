@@ -120,8 +120,8 @@ gleichnass serve --host 0.0.0.0        # or: docker compose up -d
 
 It serves the landing page with a registration form on it. Someone fills in
 their name, their town and which alerts they want; the server geocodes the
-town, generates a private ntfy topic, writes `users.d/<name>.yaml` and shows
-them a QR code that subscribes their phone. Nothing else is touched, so the
+town, generates a private ntfy topic, writes `users.d/<name>.yaml` and hands
+them their subscription: a QR code on a computer, a button on a phone. Nothing else is touched, so the
 config you maintain by hand keeps its comments.
 
 **Registration is open by default.** Two things keep that from being a
@@ -348,9 +348,20 @@ config file.
   geocoder was unreachable rather than that the place does not exist.
 - **The QR code opens the app, not a web page.** It points at `/abo/<topic>` on
   this site, which forwards into ntfy's `ntfy://` deep link so the app opens and
-  subscribes in one step. That scheme is Android only, so iPhones are shown the
-  topic to enter instead; pointing the QR straight at `ntfy://` would give them
-  a dead scan.
+  subscribes in one step. That scheme is Android only, so pointing the QR
+  straight at `ntfy://` would give iPhones a dead scan.
+- **A phone gets buttons, not a QR code.** The pages read the `User-Agent` and
+  drop the codes on a phone: a code is a way to move something to a second
+  screen, and there is no second screen. Android is offered the deep link,
+  Telegram its `t.me` link, and each phone only the app shop it can install
+  from. The guess is never load bearing - a computer's page keeps a plain link
+  next to the code, for the iPad that calls itself a Mac.
+- **On the iPhone, nothing can hand ntfy a topic.** The iOS app registers no
+  URL scheme and claims no https address, so no link, QR code or shortcut can
+  reach it - the only route in is the topic field. So iPhones get the topic in
+  one tap on the clipboard, and, for anyone who would rather not paste at all,
+  ntfy's web app: opening `https://<server>/<topic>` subscribes by itself, and
+  added to the home screen it can push as well.
 - **The Telegram bot is identified from its token**, via `getMe`. Setting the
   token used not to be enough: the site also wanted the bot's name in the config
   file, which lives inside the deployment's volume, so a token in the

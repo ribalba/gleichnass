@@ -46,6 +46,8 @@ OG_IMAGE = Path(__file__).with_name("templates") / "og.png"
 ICON_TAG = '<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNyIgZmlsbD0iIzFhNWZkMCIvPjxwYXRoIGQ9Ik0xNiA1LjVjNC4yIDUuOCA2LjQgOS43IDYuNCAxMi4zYTYuNCA2LjQgMCAxIDEtMTIuOCAwQzkuNiAxNS4yIDExLjggMTEuMyAxNiA1LjVaIiBmaWxsPSIjZmZmZmZmIi8+PC9zdmc+">'
 STYLE_BLOCK = re.compile(r"<style>.*?</style>", re.S)
 TELEGRAM_BLOCK = re.compile(r"[ \t]*<!--telegram:start-->.*?<!--telegram:end-->\n?", re.S)
+STORES_BLOCK = re.compile(r"<!--stores:start-->.*?<!--stores:end-->", re.S)
+STEP3_BLOCK = re.compile(r"<!--step3:start-->.*?<!--step3:end-->", re.S)
 TEMPLATE_BOT = "gleichnass_bot"
 # Long, because places do not move. Not unlimited, so a name that was
 # missing from the geocoder one day can turn up later.
@@ -88,52 +90,183 @@ def telegram_bot_for(config) -> str | None:
 
 TOPIC_OK = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
+# -- who is looking ------------------------------------------------------
 
-def subscribe_page(topic: str, label: str, server: str) -> str:
+_UA_IOS = re.compile(r"iPhone|iPad|iPod", re.I)
+_UA_ANDROID = re.compile(r"Android", re.I)
+_UA_MOBILE = re.compile(r"Mobi|Android|iPhone|iPad|iPod|Windows Phone|IEMobile", re.I)
+
+
+def platform_of(user_agent: str) -> str:
+    """Which sort of device is asking: ios, android, mobile or desktop.
+
+    A QR code moves something from one screen to another and is useless when
+    both are the same screen, so a phone gets buttons instead. Sniffing the
+    user agent is crude, and an iPad in its default desktop guise says
+    "Macintosh" and lands here as a computer. That is why every page keeps a
+    direct link next to the code: the worst a wrong guess costs is a QR nobody
+    scans, never a dead end.
+    """
+    agent = user_agent or ""
+    if _UA_IOS.search(agent):
+        return "ios"
+    if _UA_ANDROID.search(agent):
+        return "android"
+    if _UA_MOBILE.search(agent):
+        return "mobile"
+    return "desktop"
+
+
+# -- the pieces the pages are built from ---------------------------------
+
+STORE_IOS = ('<a class="store" href="https://apps.apple.com/us/app/ntfy/id1625396347">'
+             '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" '
+             'aria-hidden="true"><path d="M17.05 12.54c-.02-2.3 1.88-3.4 1.96-3.45-1.07-1.56'
+             '-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.82-.81-2.99-.79-1.54.02'
+             '-2.96.9-3.75 2.28-1.6 2.78-.41 6.89 1.15 9.14.76 1.1 1.67 2.34 2.86 2.29 1.15'
+             '-.05 1.58-.74 2.97-.74 1.39 0 1.78.74 2.99.72 1.23-.02 2.01-1.12 2.76-2.23.87'
+             '-1.28 1.23-2.52 1.25-2.58-.03-.01-2.39-.92-2.4-3.67Z"/><path d="M14.79 5.6c.63'
+             '-.77 1.06-1.83.94-2.9-.91.04-2.01.61-2.66 1.37-.58.68-1.09 1.77-.95 2.81 1.01'
+             '.08 2.05-.51 2.67-1.28Z"/></svg>iPhone</a>')
+STORE_PLAY = ('<a class="store" '
+              'href="https://play.google.com/store/apps/details?id=io.heckel.ntfy">'
+              '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+              'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" '
+              'aria-hidden="true"><path d="M7 11.5a5 5 0 0 1 10 0"/><path d="M7 11.5h10v5.2a1.3 '
+              '1.3 0 0 1-1.3 1.3H8.3A1.3 1.3 0 0 1 7 16.7v-5.2Z"/><path d="M8.6 7.2 7.7 '
+              '5.8M15.4 7.2l.9-1.4"/><circle cx="9.8" cy="9.6" r=".65" fill="currentColor" '
+              'stroke="none"/><circle cx="14.2" cy="9.6" r=".65" fill="currentColor" '
+              'stroke="none"/></svg>Android</a>')
+STORE_FDROID = ('<a class="store" href="https://f-droid.org/packages/io.heckel.ntfy/">'
+                '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" '
+                'stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" '
+                'aria-hidden="true"><path d="M12 3.2 4.5 7v10L12 20.8 19.5 17V7L12 3.2Z"/>'
+                '<path d="M4.5 7 12 10.8 19.5 7M12 10.8v10"/></svg>F-Droid</a>')
+
+
+def store_links(platform: str = "desktop") -> str:
+    """Only the shops this device can actually install from, so a phone is not
+    asked to pick its own operating system out of a row of three."""
+    if platform == "ios":
+        return STORE_IOS
+    if platform == "android":
+        return STORE_PLAY + "\n" + STORE_FDROID
+    return STORE_IOS + "\n" + STORE_PLAY + "\n" + STORE_FDROID
+
+
+def deep_link(topic: str, label: str, server: str) -> str:
+    """ntfy's own link into the app. Android only; see subscribe_page."""
+    host = server.split("://", 1)[-1].rstrip("/")
+    insecure = "&secure=false" if server.startswith("http://") else ""
+    return f"ntfy://{host}/{topic}?display={quote(label)}{insecure}"
+
+
+# Written as a listener on the page rather than an onclick, so the topic
+# travels in an attribute and never has to survive quoting into JavaScript.
+COPY_JS = """
+<script>
+  document.addEventListener("click", function (event) {
+    var button = event.target.closest && event.target.closest("[data-copy]");
+    if (!button) { return; }
+    var text = button.getAttribute("data-copy");
+    var before = button.textContent;
+    function said(message) {
+      button.textContent = message;
+      setTimeout(function () { button.textContent = before; }, 5000);
+    }
+    // Without a secure context there is no clipboard API, so the topic is
+    // selected instead and a long press offers "Kopieren".
+    function select() {
+      var shown = document.getElementById(button.getAttribute("data-shows") || "");
+      if (!shown) { return said("Kopieren geht hier nicht"); }
+      var range = document.createRange();
+      range.selectNodeContents(shown);
+      var selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      said("Markiert \u2013 lange dr\u00fccken, dann \u201eKopieren\u201c");
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(function () { said("Kopiert \u2713"); }, select);
+    } else {
+      select();
+    }
+  });
+</script>
+"""
+
+
+def copy_button(topic: str, label: str = "Thema kopieren",
+                quiet: bool = False, shows: str = "topic-name") -> str:
+    kind = "btn-quiet" if quiet else "btn-go"
+    return (f'<button class="btn {kind} btn-block" type="button" '
+            f'data-copy="{html.escape(topic, quote=True)}" data-shows="{shows}">'
+            f"{html.escape(label)}</button>")
+
+
+def _topic_note(topic: str) -> str:
+    return (f'Dein Thema: <code id="topic-name">{html.escape(topic)}</code>. '
+            "Wer diesen Namen kennt, sieht deine Meldungen, also bitte nicht "
+            "öffentlich teilen.")
+
+
+def subscribe_page(topic: str, label: str, server: str, platform: str = "") -> str:
     """The page the QR code leads to, whose whole job is to open the app.
 
     Scanning a plain https://ntfy.sh/<topic> link lands in a browser, which is
     not what anyone wants from a QR code. ntfy has a deep link that opens the
-    app and subscribes in one step, but it is Android only, so pointing the QR
-    straight at it would leave iPhones with a dead scan. Hence this page:
-    Android is sent on to the app immediately, everyone else gets the topic and
-    somewhere to put it.
+    app and subscribes in one step, but it is Android only: the iOS app
+    registers no URL scheme and claims no https address either, so nothing can
+    hand it a topic. Android is therefore sent on to the app immediately, and
+    an iPhone gets the shortest route that does exist - one tap to the
+    clipboard, or the web app, which subscribes on its own when opened.
     """
-    host = server.split("://", 1)[-1].rstrip("/")
-    insecure = "&secure=false" if server.startswith("http://") else ""
-    deep = f"ntfy://{host}/{topic}?display={quote(label)}{insecure}"
+    deep = deep_link(topic, label, server)
     web_url = f"{server.rstrip('/')}/{topic}"
-    return f"""
-<h1 style="margin-bottom:.8rem">Abo einrichten</h1>
-<p class="lede">Gleich hast du es. Wenn sich die ntfy-App nicht von selbst
-   öffnet, hilft einer der Wege hier.</p>
-
-<div class="signup" style="margin-top:1.8rem">
-  <a class="btn btn-go" style="justify-content:center" href="{html.escape(deep)}">
+    # An unknown device still gets everything, since guessing wrong should not
+    # take an option away.
+    app_button = "" if platform == "ios" else f"""
+  <a class="btn btn-go btn-block" href="{html.escape(deep)}">
     In der ntfy-App öffnen
-  </a>
-  <div>
-    <strong>iPhone, oder es klappt nicht?</strong>
-    <p class="privacy" style="margin-top:.3rem">
-      ntfy öffnen, auf <em>+</em> tippen und dieses Thema eintragen:
-    </p>
-    <p style="margin-top:.5rem"><code>{html.escape(topic)}</code></p>
-  </div>
-  <div>
-    <strong>Lieber im Browser?</strong>
-    <p class="privacy" style="margin-top:.3rem">
-      <a href="{html.escape(web_url)}">{html.escape(web_url)}</a>
-    </p>
-  </div>
-</div>
-
+  </a>"""
+    forward = "" if platform == "ios" else f"""
 <script>
   // Only Android registers the ntfy:// scheme. Trying it on iOS raises an
-  // "address is invalid" dialog, so there it is left as a button instead.
+  // "address is invalid" dialog, so there it is left out entirely.
   if (/Android/i.test(navigator.userAgent)) {{
     location.replace({json.dumps(deep)});
   }}
-</script>
+</script>"""
+    lede = ("Auf dem iPhone kann keine Seite die ntfy-App füttern. Zwei Wege "
+            "bleiben, beide ohne Tippen."
+            if platform == "ios" else
+            "Gleich hast du es. Wenn sich die ntfy-App nicht von selbst "
+            "öffnet, hilft einer der Wege hier.")
+    return f"""
+<h1 style="margin-bottom:.8rem">Abo einrichten</h1>
+<p class="lede">{lede}</p>
+
+<div class="signup" style="margin-top:1.8rem">{app_button}
+  <div>
+    <strong>Thema kopieren, in ntfy einfügen</strong>
+    <p class="privacy" style="margin-top:.3rem">
+      Tippe auf den Knopf, öffne ntfy, tippe auf <em>+</em> und füge den Namen
+      ins Feld „Thema“ ein.
+    </p>
+    <p style="margin-top:.8rem">{copy_button(topic)}</p>
+    <p class="privacy" style="margin-top:.7rem">{_topic_note(topic)}</p>
+  </div>
+  <div>
+    <strong>Oder ganz ohne App</strong>
+    <p class="privacy" style="margin-top:.3rem">
+      <a href="{html.escape(web_url)}">{html.escape(web_url)}</a> abonniert dich
+      beim Öffnen von selbst. Damit die Meldungen auch bei geschlossenem
+      Browser ankommen, die Seite über „Teilen“ zum Home-Bildschirm hinzufügen
+      und dort Mitteilungen erlauben.
+    </p>
+  </div>
+</div>
+{COPY_JS}{forward}
 """
 
 
@@ -156,13 +289,24 @@ def _shell(title: str, body: str) -> bytes:
 
 
 def landing(error: str = "", invite_needed: bool = False,
-            telegram_bot: str | None = None, base_url: str = "") -> bytes:
+            telegram_bot: str | None = None, base_url: str = "",
+            platform: str = "desktop") -> bytes:
     """The landing page, with the form's optional parts filled in.
 
-    The template is valid on its own: both hooks are HTML comments, so opening
-    the file directly still renders the finished page.
+    The template is valid on its own: every hook is an HTML comment, so opening
+    the file directly still renders the finished page - on a computer, which is
+    what the wording assumes and what a phone gets swapped out here.
     """
     page = _template()
+    if platform != "desktop":
+        page = STORES_BLOCK.sub(store_links(platform), page)
+        page = STEP3_BLOCK.sub(
+            "<h3>Abonnieren und testen</h3>"
+            "<p>Gleich nach dem Anmelden bekommst du einen Knopf, der dich "
+            "abonniert. Testnachricht schicken, fertig. Ab dann meldet sich "
+            "GleichNass von selbst.</p>",
+            page,
+        )
     if base_url:
         # Crawlers for chat previews generally will not follow a relative
         # og:image, so give them the whole address.
@@ -192,70 +336,142 @@ def landing(error: str = "", invite_needed: bool = False,
     return page.encode("utf-8")
 
 
-def welcome(entry: dict, topic: str, topic_url: str, place: str,
-            telegram_bot: str | None = None, code: str | None = None,
-            leave_url: str = "") -> str:
-    qr = segno.make(topic_url, error="m").svg_inline(scale=4, dark="#14213a", light="#ffffff")
-    telegram_step = ""
-    if telegram_bot and code:
-        link = telegram_link.deep_link(telegram_bot, code)
-        # A QR as well as a button: this page is usually open on a computer,
-        # while Telegram is on the phone. t.me links open the app on both
-        # Android and iOS, so unlike the ntfy one this code needs no fallback.
-        tg_qr = segno.make(link, error="m").svg_inline(
-            scale=4, dark="#14213a", light="#ffffff"
-        )
-        telegram_step = f"""<div>
+def _qr(target: str) -> str:
+    """A code, on a white card so it scans in the dark theme too."""
+    code = segno.make(target, error="m").svg_inline(scale=4, dark="#14213a", light="#ffffff")
+    return (f'<div style="background:#fff;border-radius:14px;padding:1.1rem;margin-top:.7rem;'
+            f'display:flex;justify-content:center"><div style="width:190px">{code}</div></div>')
+
+
+def _ntfy_step(topic: str, abo_url: str, server: str, platform: str, place: str,
+               telegram: bool = False) -> str:
+    """Step two: the topic, into the app, by whichever route this device has."""
+    if platform == "ios":
+        # No page can hand a topic to the iOS app - it registers no ntfy://
+        # scheme and claims no https address - so the clipboard is the shortest
+        # honest route, with the web app for anyone who would rather not paste.
+        web_url = f"{server.rstrip('/')}/{topic}"
+        instead = ('<p class="privacy" style="margin-top:.7rem">Zu umständlich? '
+                   "Auf dem iPhone ist Telegram der kürzere Weg, dafür genügt "
+                   "Schritt 3.</p>") if telegram else ""
+        return f"""<div>
+    <strong>2. Thema in ntfy eintragen</strong>
+    <p class="privacy" style="margin-top:.3rem">
+      Tippe auf den Knopf, öffne ntfy, tippe auf <em>+</em> und füge den Namen
+      ins Feld „Thema“ ein. Sonst nichts ändern.
+    </p>
+    <p style="margin-top:.8rem">{copy_button(topic)}</p>
+    <p class="privacy" style="margin-top:.7rem">{_topic_note(topic)}</p>
+    <p class="privacy" style="margin-top:.7rem">
+      Ohne App geht es auch: <a href="{html.escape(web_url)}">im Browser abonnieren</a>.
+      Die Seite abonniert dich beim Öffnen selbst; über „Teilen → Zum
+      Home-Bildschirm“ kommen die Meldungen auch dort als Mitteilung an.
+    </p>
+    {instead}
+  </div>"""
+    if platform in ("android", "mobile"):
+        deep = deep_link(topic, place[:40] or "GleichNass", server)
+        return f"""<div>
+    <strong>2. Thema abonnieren</strong>
+    <p class="privacy" style="margin-top:.3rem">
+      Einmal tippen: ntfy öffnet sich und ist danach abonniert.
+    </p>
+    <p style="margin-top:.8rem">
+      <a class="btn btn-go btn-block" href="{html.escape(deep)}">In der ntfy-App abonnieren</a>
+    </p>
+    <p class="privacy" style="margin-top:.7rem">
+      Passiert nichts, fehlt noch die App. Oder trage das Thema von Hand ein:
+    </p>
+    <p style="margin-top:.6rem">{copy_button(topic, quiet=True)}</p>
+    <p class="privacy" style="margin-top:.7rem">{_topic_note(topic)}</p>
+  </div>"""
+    return f"""<div>
+    <strong>2. Code scannen, die App öffnet sich</strong>
+    {_qr(abo_url)}
+    <p class="privacy" style="margin-top:.7rem">
+      Auf Android landest du direkt in ntfy und bist abonniert. Auf dem iPhone
+      öffnet sich eine Seite, die dir das Thema in die Zwischenablage legt.
+      {_topic_note(topic)}
+    </p>
+    <p class="privacy" style="margin-top:.7rem">
+      Liest du das schon auf dem Handy?
+      <a href="{html.escape(abo_url)}">Dann hier entlang</a>.
+    </p>
+  </div>"""
+
+
+def _telegram_step(link: str, bot: str, code: str, platform: str) -> str:
+    """Step three, where Telegram is wanted. t.me links open the app on both
+    phones, so unlike ntfy this needs no per-platform detour - only the code
+    is pointless on the device Telegram is not on."""
+    if platform == "desktop":
+        return f"""<div>
     <strong>3. Telegram verbinden</strong>
     <p class="privacy" style="margin-top:.3rem">
       Scanne diesen Code mit dem Handy: Telegram öffnet sich beim Bot und
       schickt deinen Code ab. Wenige Minuten später kommen die Meldungen auch dort an.
     </p>
-    <div style="background:#fff;border-radius:14px;padding:1.1rem;margin-top:.7rem;
-                display:flex;justify-content:center">
-      <div style="width:190px">{tg_qr}</div>
-    </div>
+    {_qr(link)}
     <p style="margin-top:.9rem">
-      <a class="btn btn-quiet" href="{html.escape(link)}">Direkt @{html.escape(telegram_bot)} öffnen</a>
+      <a class="btn btn-quiet" href="{html.escape(link)}">Direkt @{html.escape(bot)} öffnen</a>
     </p>
     <p class="privacy" style="margin-top:.7rem">
       Geht beides nicht, schreibe dem Bot von Hand:
       <code>/start {html.escape(code)}</code>
     </p>
   </div>"""
+    return f"""<div>
+    <strong>3. Telegram verbinden</strong>
+    <p class="privacy" style="margin-top:.3rem">
+      Einmal tippen: Telegram öffnet sich beim Bot und schickt deinen Code ab.
+      Wenige Minuten später kommen die Meldungen auch dort an.
+    </p>
+    <p style="margin-top:.8rem">
+      <a class="btn btn-go btn-block" href="{html.escape(link)}">@{html.escape(bot)} öffnen</a>
+    </p>
+    <p class="privacy" style="margin-top:.7rem">
+      Geht das nicht, schreibe dem Bot von Hand:
+      <code>/start {html.escape(code)}</code>
+    </p>
+  </div>"""
+
+
+def welcome(entry: dict, topic: str, topic_url: str, place: str,
+            telegram_bot: str | None = None, code: str | None = None,
+            leave_url: str = "", platform: str = "desktop",
+            server: str = "https://ntfy.sh") -> str:
+    """The page after signing up, tailored to whatever is reading it.
+
+    On a computer the phone is a second screen and the QR code bridges the two.
+    On a phone there is nothing to bridge, so the codes give way to buttons
+    that go straight where the code would have pointed.
+    """
+    telegram_step = ""
+    if telegram_bot and code:
+        telegram_step = _telegram_step(
+            telegram_link.deep_link(telegram_bot, code), telegram_bot, code, platform
+        )
     modes = "".join(f"<li>{html.escape(describe_rule(rule))}</li>" for rule in entry["rules"])
     leave_note = ""
     if leave_url:
         leave_note = (
             f'<a href="{html.escape(leave_url)}">Wieder abmelden</a> &nbsp;·&nbsp; '
         )
+    hands = ("Noch zwei Handgriffe auf dem Handy" if platform == "desktop"
+             else "Noch zwei Handgriffe")
     return f"""
 <h1 style="margin-bottom:.8rem">Fast geschafft, {html.escape(entry['name'])}.</h1>
-<p class="lede">Noch zwei Handgriffe auf dem Handy, dann meldet sich
+<p class="lede">{hands}, dann meldet sich
    GleichNass für {html.escape(place)} von selbst.</p>
 
 <div class="signup" style="margin-top:2rem">
   <div>
     <strong>1. ntfy installieren</strong>
     <p class="stores">
-            <a class="store" href="https://apps.apple.com/us/app/ntfy/id1625396347"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.05 12.54c-.02-2.3 1.88-3.4 1.96-3.45-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.82-.81-2.99-.79-1.54.02-2.96.9-3.75 2.28-1.6 2.78-.41 6.89 1.15 9.14.76 1.1 1.67 2.34 2.86 2.29 1.15-.05 1.58-.74 2.97-.74 1.39 0 1.78.74 2.99.72 1.23-.02 2.01-1.12 2.76-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.39-.92-2.4-3.67Z"/><path d="M14.79 5.6c.63-.77 1.06-1.83.94-2.9-.91.04-2.01.61-2.66 1.37-.58.68-1.09 1.77-.95 2.81 1.01.08 2.05-.51 2.67-1.28Z"/></svg>iPhone</a>
-            <a class="store" href="https://play.google.com/store/apps/details?id=io.heckel.ntfy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11.5a5 5 0 0 1 10 0"/><path d="M7 11.5h10v5.2a1.3 1.3 0 0 1-1.3 1.3H8.3A1.3 1.3 0 0 1 7 16.7v-5.2Z"/><path d="M8.6 7.2 7.7 5.8M15.4 7.2l.9-1.4"/><circle cx="9.8" cy="9.6" r=".65" fill="currentColor" stroke="none"/><circle cx="14.2" cy="9.6" r=".65" fill="currentColor" stroke="none"/></svg>Android</a>
-            <a class="store" href="https://f-droid.org/packages/io.heckel.ntfy/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2 4.5 7v10L12 20.8 19.5 17V7L12 3.2Z"/><path d="M4.5 7 12 10.8 19.5 7M12 10.8v10"/></svg>F-Droid</a>
+            {store_links(platform)}
           </p>
   </div>
-  <div>
-    <strong>2. Code scannen, die App öffnet sich</strong>
-    <div style="background:#fff;border-radius:14px;padding:1.1rem;margin-top:.7rem;
-                display:flex;justify-content:center">
-      <div style="width:190px">{qr}</div>
-    </div>
-    <p class="privacy" style="margin-top:.7rem">
-      Auf Android landest du direkt in ntfy und bist abonniert. Auf dem iPhone
-      öffnet sich eine Seite mit deinem Thema, das du in der App einträgst:
-      <code>{html.escape(topic)}</code>.
-      Wer diesen Namen kennt, sieht deine Meldungen, also bitte nicht öffentlich teilen.
-    </p>
-  </div>
+  {_ntfy_step(topic, topic_url, server, platform, place, bool(telegram_step))}
   <div>
     <strong>Du bekommst</strong>
     <ul style="margin:.4rem 0 0;padding-left:1.1rem;color:var(--muted)">{modes}</ul>
@@ -271,6 +487,7 @@ def welcome(entry: dict, topic: str, topic_url: str, place: str,
 </div>
 
 <p class="note" style="margin-top:1.5rem">{leave_note}<a href="/">Zurück zur Startseite</a></p>
+{COPY_JS}
 """
 
 
@@ -395,6 +612,10 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         log.info("%s %s", self._client(), fmt % args)
 
+    def _platform(self) -> str:
+        """Phone or computer, as far as the browser is willing to say."""
+        return platform_of(self.headers.get("User-Agent", ""))
+
     def _client(self) -> str:
         """The address to hold responsible, which is not always the peer.
 
@@ -421,6 +642,7 @@ class Handler(BaseHTTPRequestHandler):
                 invite_needed=bool(config.signup.invite_code),
                 telegram_bot=telegram_bot_for(config),
                 base_url=self._base_url(config),
+                platform=self._platform(),
             ))
         elif route == "/places":
             if not self.settings["browse"].allow(self._client()):
@@ -469,7 +691,8 @@ class Handler(BaseHTTPRequestHandler):
             (config.defaults["channels"].get("ntfy") or {}).get("server") or "https://ntfy.sh"
         ).rstrip("/")
         label = (query.get("ort", [""])[0] or "GleichNass")[:40]
-        self._send(200, _shell("Abo einrichten", subscribe_page(topic, label, server)))
+        self._send(200, _shell("Abo einrichten",
+                               subscribe_page(topic, label, server, self._platform())))
 
     def _impressum(self):
         config = self._config()
@@ -709,7 +932,8 @@ class Handler(BaseHTTPRequestHandler):
             _shell(
                 "Fast geschafft",
                 welcome(created.entry, created.topic, qr_target, where,
-                        telegram_bot=bot, code=code,
+                        telegram_bot=bot, code=code, platform=self._platform(),
+                        server=server,
                         leave_url=f"{self._base_url(config)}/abbestellen"
                                   f"?u={quote(created.entry['id'])}"
                                   f"&t={quote(created.entry['unsubscribe'])}"),
@@ -794,7 +1018,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _reject(self, config, error: str):
         self._send(400, landing(error, bool(config.signup.invite_code),
-                                telegram_bot_for(config)))
+                                telegram_bot_for(config), platform=self._platform()))
 
     def _not_found(self):
         self._send(404, _shell("Nicht gefunden", '<h1>Nicht gefunden</h1>'
