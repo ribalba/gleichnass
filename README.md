@@ -128,13 +128,21 @@ generates a private ntfy topic where one is needed, writes
 computer, a button on a phone. Nothing else is touched, so the config you
 maintain by hand keeps its comments.
 
-The three ways differ only in what happens after the form:
+The way chosen decides both how many steps the flow has and what the
+confirmation page does with them:
 
-| Way | Channel written | What the confirmation page does |
-| --- | --- | --- |
-| `ntfy` | `ntfy` with a fresh topic | App shops, then the topic into the app - deep link, QR or clipboard, by device |
-| `web` | `ntfy` with a fresh topic | The topic's own URL, which subscribes on open, plus how to keep it pushing |
-| `telegram` | none yet, only `telegram_code` | The `t.me` link that hands the bot the code |
+| Way | Steps before the form | Channel written | What the confirmation page does |
+| --- | --- | --- | --- |
+| `ntfy` | choose, then install the app | `ntfy` with a fresh topic | The topic into the app - deep link, QR or clipboard, by device |
+| `web` | choose | `ntfy` with a fresh topic | The topic's own URL, which subscribes on open, plus how to keep it pushing |
+| `telegram` | choose | none yet, only `telegram_code` | The `t.me` link that hands the bot the code |
+
+Installing the app is a step of its own, with the shops under a heading that
+says what they are for, and a confirmation that unlocks the form. The other two
+ways have nothing to install, so that step is displayed away entirely - which is
+why the numbers in the flow are a CSS counter and not written into the markup:
+a step that is not this way's takes its number with it, and the rest close up
+behind it.
 
 **Registration is open by default.** Two things keep that from being a
 liability:

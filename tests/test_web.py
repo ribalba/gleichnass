@@ -623,3 +623,31 @@ def test_an_unlinked_telegram_signup_is_told_why_nothing_arrived():
 def test_a_working_ntfy_test_is_not_nagged_about_telegram():
     page = web._test_result(["ntfy"], [], waiting_for_telegram=False)
     assert "Telegram" not in page
+
+
+def test_installing_the_app_is_a_step_of_its_own():
+    """The shop buttons used to hang off the end of the choice with no heading
+    on them, which read as decoration rather than as something to do."""
+    page = web.landing().decode()
+    step = page[page.index('id="step-install"'):page.index('id="step-form"')]
+
+    assert "ntfy installieren" in step
+    assert "apps.apple.com" in step and "play.google" in step
+    assert 'id="app-done"' in step, "and the confirmation that unlocks the form"
+
+
+def test_the_install_step_belongs_to_the_app_way_alone():
+    page = web.landing().decode()
+    opening = page[page.index('<li class="flow-step way-then"'):]
+    assert opening[:120].count('data-way="ntfy"') == 1, (
+        "the whole step is displayed away for the other two ways"
+    )
+
+
+def test_the_step_numbers_are_counted_rather_than_written_down():
+    """A step that is not this way's takes its number with it, so writing 1, 2,
+    3 into the markup would leave a gap for Telegram and the browser."""
+    page = web.landing().decode()
+    assert "counter-increment: step" in page
+    assert "content: counter(step)" in page
+    assert "<b>1</b>" not in page and "<b>2</b>" not in page and "<b>3</b>" not in page

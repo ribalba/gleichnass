@@ -237,8 +237,15 @@
   .flow {
     list-style: none; margin: 0; padding: 0; max-width: 40rem;
     display: flex; flex-direction: column; gap: 1rem;
+    counter-reset: step;
   }
+  /* Counted rather than written out, because the install step only exists for
+     one of the three ways: a step that is displayed away takes no number with
+     it, and everything after it moves up on its own. */
+  .flow-step { counter-increment: step; }
+  .flow-num b::before { content: counter(step); }
   .flow-step {
+    scroll-margin-top: 1.5rem;
     background: var(--paper); border-radius: var(--r); padding: 1.4rem 1.5rem 1.5rem;
     display: grid; grid-template-columns: 2.3rem minmax(0, 1fr); gap: 1rem;
     align-items: start;
@@ -592,7 +599,7 @@ ab <span id="onset-time">14:45</span> · 1.8 mm, Spitze 3.2 mm/h</div>
 <section class="tint-sun" id="mitmachen">
   <div class="page">
     <div class="head">
-      <h2>In drei Schritten dabei</h2>
+      <h2>In wenigen Schritten dabei</h2>
       <p class="note">
         Zuerst suchst du dir aus, wie die Meldungen bei dir ankommen sollen.
         Danach richtet sich alles Weitere. Keine E-Mail-Adresse, keine
@@ -602,7 +609,7 @@ ab <span id="onset-time">14:45</span> · 1.8 mm, Spitze 3.2 mm/h</div>
 
     <ol class="flow">
       <li class="flow-step" id="step-way" data-state="active">
-        <span class="flow-num" aria-hidden="true"><b>1</b><i>✓</i></span>
+        <span class="flow-num" aria-hidden="true"><b></b><i>✓</i></span>
         <div class="flow-body">
           <h3>Weg aussuchen</h3>
           <p>Wohin sollen die Meldungen? Alle drei Wege kosten nichts, laufen
@@ -663,18 +670,6 @@ ab <span id="onset-time">14:45</span> · 1.8 mm, Spitze 3.2 mm/h</div>
             </div>
           </fieldset>
 
-<p class="stores way-then" data-way="ntfy"><!--stores:start-->
-            <a class="store" href="https://apps.apple.com/us/app/ntfy/id1625396347"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.05 12.54c-.02-2.3 1.88-3.4 1.96-3.45-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.82-.81-2.99-.79-1.54.02-2.96.9-3.75 2.28-1.6 2.78-.41 6.89 1.15 9.14.76 1.1 1.67 2.34 2.86 2.29 1.15-.05 1.58-.74 2.97-.74 1.39 0 1.78.74 2.99.72 1.23-.02 2.01-1.12 2.76-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.39-.92-2.4-3.67Z"/><path d="M14.79 5.6c.63-.77 1.06-1.83.94-2.9-.91.04-2.01.61-2.66 1.37-.58.68-1.09 1.77-.95 2.81 1.01.08 2.05-.51 2.67-1.28Z"/></svg>iPhone</a>
-            <a class="store" href="https://play.google.com/store/apps/details?id=io.heckel.ntfy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11.5a5 5 0 0 1 10 0"/><path d="M7 11.5h10v5.2a1.3 1.3 0 0 1-1.3 1.3H8.3A1.3 1.3 0 0 1 7 16.7v-5.2Z"/><path d="M8.6 7.2 7.7 5.8M15.4 7.2l.9-1.4"/><circle cx="9.8" cy="9.6" r=".65" fill="currentColor" stroke="none"/><circle cx="14.2" cy="9.6" r=".65" fill="currentColor" stroke="none"/></svg>Android</a>
-            <a class="store" href="https://f-droid.org/packages/io.heckel.ntfy/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2 4.5 7v10L12 20.8 19.5 17V7L12 3.2Z"/><path d="M4.5 7 12 10.8 19.5 7M12 10.8v10"/></svg>F-Droid</a>
-          <!--stores:end--></p>
-          <button type="button" class="btn btn-go btn-wide way-then" data-way="ntfy" id="app-done">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="m5 12.5 4.5 4.5L19 7.5"/>
-            </svg>
-            Habe ich installiert
-          </button>
           <!--telegram:start-->
           <p class="step-hint way-then" data-way="telegram" hidden>Nichts zu
             installieren. Nach dem Anmelden öffnest du mit einem Tipp den Bot
@@ -686,8 +681,30 @@ ab <span id="onset-time">14:45</span> · 1.8 mm, Spitze 3.2 mm/h</div>
         </div>
       </li>
 
+      <li class="flow-step way-then" data-way="ntfy" id="step-install">
+        <span class="flow-num" aria-hidden="true"><b></b><i>✓</i></span>
+        <div class="flow-body">
+          <h3>ntfy installieren</h3>
+          <p>Die kleine App, die die Meldungen entgegennimmt. Kostenlos,
+            quelloffen, ohne Konto. Hol sie dir aufs Handy und komm dann hierher
+            zurück.</p>
+<p class="stores"><!--stores:start-->
+            <a class="store" href="https://apps.apple.com/us/app/ntfy/id1625396347"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.05 12.54c-.02-2.3 1.88-3.4 1.96-3.45-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.82-.81-2.99-.79-1.54.02-2.96.9-3.75 2.28-1.6 2.78-.41 6.89 1.15 9.14.76 1.1 1.67 2.34 2.86 2.29 1.15-.05 1.58-.74 2.97-.74 1.39 0 1.78.74 2.99.72 1.23-.02 2.01-1.12 2.76-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.39-.92-2.4-3.67Z"/><path d="M14.79 5.6c.63-.77 1.06-1.83.94-2.9-.91.04-2.01.61-2.66 1.37-.58.68-1.09 1.77-.95 2.81 1.01.08 2.05-.51 2.67-1.28Z"/></svg>iPhone</a>
+            <a class="store" href="https://play.google.com/store/apps/details?id=io.heckel.ntfy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11.5a5 5 0 0 1 10 0"/><path d="M7 11.5h10v5.2a1.3 1.3 0 0 1-1.3 1.3H8.3A1.3 1.3 0 0 1 7 16.7v-5.2Z"/><path d="M8.6 7.2 7.7 5.8M15.4 7.2l.9-1.4"/><circle cx="9.8" cy="9.6" r=".65" fill="currentColor" stroke="none"/><circle cx="14.2" cy="9.6" r=".65" fill="currentColor" stroke="none"/></svg>Android</a>
+            <a class="store" href="https://f-droid.org/packages/io.heckel.ntfy/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2 4.5 7v10L12 20.8 19.5 17V7L12 3.2Z"/><path d="M4.5 7 12 10.8 19.5 7M12 10.8v10"/></svg>F-Droid</a>
+          <!--stores:end--></p>
+          <button type="button" class="btn btn-go btn-wide" id="app-done">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m5 12.5 4.5 4.5L19 7.5"/>
+            </svg>
+            Habe ich installiert
+          </button>
+        </div>
+      </li>
+
       <li class="flow-step" id="step-form" data-state="active">
-        <span class="flow-num" aria-hidden="true"><b>2</b><i>✓</i></span>
+        <span class="flow-num" aria-hidden="true"><b></b><i>✓</i></span>
         <div class="flow-body">
           <h3>Anmelden</h3>
           <p class="step-hint" id="form-hint">Sag uns, wo du bist und wann du
@@ -768,7 +785,7 @@ ab <span id="onset-time">14:45</span> · 1.8 mm, Spitze 3.2 mm/h</div>
       </li>
 
       <li class="flow-step" id="step-test" data-state="todo">
-        <span class="flow-num" aria-hidden="true"><b>3</b><i>✓</i></span>
+        <span class="flow-num" aria-hidden="true"><b></b><i>✓</i></span>
         <div class="flow-body">
           <!--step3:start--><h3 class="way-then" data-way="ntfy">QR-Code scannen und testen</h3>
           <p class="way-then" data-way="ntfy">Gleich nach dem Anmelden bekommst du einen QR-Code.
@@ -928,11 +945,16 @@ docker compose up -d</pre>
 
   // Step 1 is a choice, and the rest of the page follows from it: everything
   // that only makes sense for one way carries data-way, and exactly one set is
-  // shown. Progressive enhancement on purpose - the markup ships with the first
-  // way chosen and the form enabled, and only this script narrows and locks it,
-  // so the page still works with no JavaScript at all.
+  // shown. Installing the app is a whole step of its own, so for the other two
+  // ways it is displayed away and the numbers close up behind it - which is why
+  // they are a CSS counter rather than written into the markup.
+  //
+  // Progressive enhancement on purpose: the markup ships with the first way
+  // chosen and the form enabled, and only this script narrows and locks it, so
+  // the page still works with no JavaScript at all.
   (function () {
     const choice = document.getElementById('step-way');
+    const install = document.getElementById('step-install');
     const step = document.getElementById('step-form');
     const form = document.getElementById('anmelden');
     const button = document.getElementById('app-done');
@@ -942,15 +964,17 @@ docker compose up -d</pre>
 
     const variants = document.querySelectorAll('.way-then');
     const controls = form.querySelectorAll('input, select, button');
-    const waiting = 'Erst Schritt 1: installiere ntfy und bestätige es oben.';
+    const waiting = 'Erst ntfy installieren und oben bestätigen.';
     const ready = hint ? hint.textContent : '';
     // A rejected submission comes back with the form filled in and an error on
     // it; re-locking there would trap someone who has already got this far.
-    let installed = !!form.querySelector('.err');
+    const returning = !!form.querySelector('.err');
+    let installed = returning;
+    let picked = returning;
 
     function chosen() {
-      const picked = document.querySelector('input[name="way"]:checked');
-      return picked ? picked.value : 'ntfy';
+      const one = document.querySelector('input[name="way"]:checked');
+      return one ? one.value : 'ntfy';
     }
 
     function lock(locked) {
@@ -962,18 +986,22 @@ docker compose up -d</pre>
     function settle(moved) {
       const way = chosen();
       variants.forEach(function (el) { el.hidden = el.dataset.way !== way; });
-      // Only the app has to be installed first, so only the app gets a gate.
+      // Only the app has to be installed, so only the app gets a gate.
       const open = way !== 'ntfy' || installed;
-      choice.dataset.state = open ? 'done' : 'active';
+      choice.dataset.state = picked ? 'done' : 'active';
+      if (install) install.dataset.state = installed ? 'done' : 'active';
       lock(!open);
-      if (moved && open) {
-        document.getElementById('name').focus({ preventScroll: true });
-        step.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      if (!moved) return;
+      // Whichever step is now the one to act on. Aligned to its top, not its
+      // middle: step 2 is taller than a phone screen, and centring it opened
+      // the page halfway down the form.
+      const next = open ? step : install;
+      if (next) next.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (open) document.getElementById('name').focus({ preventScroll: true });
     }
 
     ways.forEach(function (radio) {
-      radio.addEventListener('change', function () { settle(true); });
+      radio.addEventListener('change', function () { picked = true; settle(true); });
     });
 
     if (button) {
