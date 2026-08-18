@@ -253,7 +253,10 @@ def _build_user(entry: dict, defaults: dict, source: Path) -> User:
     specs = entry.get("channels")
     if specs is None:
         specs = [entry["channel"]] if entry.get("channel") else []
-    if not specs:
+    # Someone who signed up for Telegram has nowhere to deliver until they have
+    # messaged the bot and their code is claimed. That is a normal half-finished
+    # signup, not a broken file, and it must not stop the whole config loading.
+    if not specs and not entry.get("telegram_code"):
         raise ConfigError(f"{source}: user {user_id!r} has no channel")
 
     channels = []

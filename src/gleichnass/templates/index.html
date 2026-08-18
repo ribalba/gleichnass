@@ -270,6 +270,44 @@
   }
   .aside-card p { font-size: .95rem; color: var(--muted); }
 
+  /* ---- picking a way in ---------------------------------------------- */
+
+  /* Three cards, each an honest summary of what that way costs. Stacked rather
+     than side by side: the step they sit in is a 40rem column, and three of
+     these across it left every line four words wide. The radio stays a real
+     radio, so the keyboard and the screen reader get the native control. */
+  .ways { display: flex; flex-direction: column; gap: .7rem; width: 100%; }
+  .ways-set { border: 0; margin: .2rem 0 .3rem; padding: 0; width: 100%; }
+  .ways-set legend { font-weight: 700; font-size: .95rem; margin-bottom: .55rem; padding: 0; }
+  .way { position: relative; }
+  .way > input {
+    position: absolute; top: 1.05rem; left: 1rem; margin: 0;
+    width: 1.15rem; height: 1.15rem; accent-color: var(--blue);
+  }
+  .way > label {
+    display: flex; flex-direction: column; gap: .5rem; cursor: pointer;
+    padding: .9rem 1rem 1rem 2.7rem; border-radius: var(--r);
+    border: 2px solid var(--sky-edge); background: var(--paper);
+  }
+  .way > input:checked + label { border-color: var(--blue); background: var(--sky); }
+  .way > input:focus-visible + label { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .way-name { display: block; font-weight: 700; font-size: .99rem; }
+  .way-name span { display: block; font-weight: 400; font-size: .86rem; color: var(--muted); }
+  .way ul {
+    list-style: none; margin: 0; padding: 0;
+    display: flex; flex-direction: column; gap: .35rem;
+    font-size: .87rem; line-height: 1.4; color: var(--muted);
+  }
+  .way li { display: grid; grid-template-columns: .85rem minmax(0, 1fr); gap: .45rem; }
+  .way li::before { font-weight: 800; }
+  .way li.pro::before { content: "+"; color: var(--blue); }
+  .way li.con::before { content: "\2212"; color: var(--sun-edge); }
+
+  /* Everything that only makes sense for one of the three ways. The page ships
+     with the first way's parts visible and the rest hidden, so it reads right
+     with no JavaScript at all. */
+  [hidden] { display: none !important; }
+
   .stores { display: flex; flex-wrap: wrap; gap: .5rem; }
   .store {
     display: inline-flex; align-items: center; gap: .45rem;
@@ -556,31 +594,95 @@ ab <span id="onset-time">14:45</span> · 1.8 mm, Spitze 3.2 mm/h</div>
     <div class="head">
       <h2>In drei Schritten dabei</h2>
       <p class="note">
-        Die Meldungen kommen über <a href="https://ntfy.sh">ntfy</a>, einen
-        freien und quelloffenen Push-Dienst. Keine E-Mail-Adresse, keine
-        Telefonnummer, kein Konto.
+        Zuerst suchst du dir aus, wie die Meldungen bei dir ankommen sollen.
+        Danach richtet sich alles Weitere. Keine E-Mail-Adresse, keine
+        Telefonnummer, kein Konto bei uns.
       </p>
     </div>
 
     <ol class="flow">
-      <li class="flow-step" id="step-app" data-state="active">
+      <li class="flow-step" id="step-way" data-state="active">
         <span class="flow-num" aria-hidden="true"><b>1</b><i>✓</i></span>
         <div class="flow-body">
-          <h3>ntfy installieren</h3>
-          <p>Die kleine App, die die Meldungen entgegennimmt. Kostenlos,
-            quelloffen, ohne Konto.</p>
-<p class="stores"><!--stores:start-->
+          <h3>Weg aussuchen</h3>
+          <p>Wohin sollen die Meldungen? Alle drei Wege kosten nichts, laufen
+            ohne Konto bei uns und lassen sich jederzeit wieder abbestellen.</p>
+
+          <fieldset class="ways-set">
+            <legend>Wie sollen die Meldungen ankommen?</legend>
+            <div class="ways">
+              <div class="way">
+                <!-- The radios sit outside the form and are pulled in by the
+                     form attribute, so the choice is submitted with the rest
+                     without the form having to wrap all of step 1. -->
+                <input type="radio" name="way" value="ntfy" id="way-ntfy" form="anmelden" checked>
+                <label for="way-ntfy">
+                  <span class="way-name">ntfy-App
+                    <span>Kleine Push-App fürs Handy</span></span>
+                  <ul>
+                    <li class="pro">Meldungen kommen zuverlässig an, auch wenn
+                      das Handy schläft</li>
+                    <li class="pro">Quelloffen, kein Konto, keine Werbung</li>
+                    <li class="con">Eine App mehr auf dem Handy</li>
+                  </ul>
+                </label>
+              </div>
+
+              <!--telegram:start-->
+              <div class="way">
+                <input type="radio" name="way" value="telegram" id="way-telegram" form="anmelden">
+                <label for="way-telegram">
+                  <span class="way-name">Telegram
+                    <span>Über @gleichnass_bot</span></span>
+                  <ul>
+                    <li class="pro">Keine neue App, wenn du Telegram schon nutzt</li>
+                    <li class="pro">Einmal antippen, fertig – auf Handy, Tablet
+                      und Rechner zugleich</li>
+                    <li class="con">Geht nur mit Telegram-Konto, und Telegram
+                      sieht, dass du den Bot nutzt</li>
+                  </ul>
+                </label>
+              </div>
+              <!--telegram:end-->
+
+              <div class="way">
+                <input type="radio" name="way" value="web" id="way-web" form="anmelden">
+                <label for="way-web">
+                  <span class="way-name">ntfy im Browser
+                    <span>Dieselbe Zustellung, ohne App</span></span>
+                  <ul>
+                    <li class="pro">Nichts installieren, geht sofort los</li>
+                    <li class="pro">Läuft auch am Rechner im Tab</li>
+                    <li class="con">Meldungen können ausbleiben, wenn der
+                      Browser aufräumt</li>
+                    <li class="con">Auf dem iPhone erst „Zum Home-Bildschirm“
+                      hinzufügen</li>
+                  </ul>
+                </label>
+              </div>
+            </div>
+          </fieldset>
+
+<p class="stores way-then" data-way="ntfy"><!--stores:start-->
             <a class="store" href="https://apps.apple.com/us/app/ntfy/id1625396347"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.05 12.54c-.02-2.3 1.88-3.4 1.96-3.45-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.82-.81-2.99-.79-1.54.02-2.96.9-3.75 2.28-1.6 2.78-.41 6.89 1.15 9.14.76 1.1 1.67 2.34 2.86 2.29 1.15-.05 1.58-.74 2.97-.74 1.39 0 1.78.74 2.99.72 1.23-.02 2.01-1.12 2.76-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.39-.92-2.4-3.67Z"/><path d="M14.79 5.6c.63-.77 1.06-1.83.94-2.9-.91.04-2.01.61-2.66 1.37-.58.68-1.09 1.77-.95 2.81 1.01.08 2.05-.51 2.67-1.28Z"/></svg>iPhone</a>
             <a class="store" href="https://play.google.com/store/apps/details?id=io.heckel.ntfy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11.5a5 5 0 0 1 10 0"/><path d="M7 11.5h10v5.2a1.3 1.3 0 0 1-1.3 1.3H8.3A1.3 1.3 0 0 1 7 16.7v-5.2Z"/><path d="M8.6 7.2 7.7 5.8M15.4 7.2l.9-1.4"/><circle cx="9.8" cy="9.6" r=".65" fill="currentColor" stroke="none"/><circle cx="14.2" cy="9.6" r=".65" fill="currentColor" stroke="none"/></svg>Android</a>
             <a class="store" href="https://f-droid.org/packages/io.heckel.ntfy/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2 4.5 7v10L12 20.8 19.5 17V7L12 3.2Z"/><path d="M4.5 7 12 10.8 19.5 7M12 10.8v10"/></svg>F-Droid</a>
           <!--stores:end--></p>
-          <button type="button" class="btn btn-go btn-wide" id="app-done">
+          <button type="button" class="btn btn-go btn-wide way-then" data-way="ntfy" id="app-done">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="m5 12.5 4.5 4.5L19 7.5"/>
             </svg>
             Habe ich installiert
           </button>
+          <!--telegram:start-->
+          <p class="step-hint way-then" data-way="telegram" hidden>Nichts zu
+            installieren. Nach dem Anmelden öffnest du mit einem Tipp den Bot
+            @gleichnass_bot, und der Rest passiert von selbst.</p>
+          <!--telegram:end-->
+          <p class="step-hint way-then" data-way="web" hidden>Nichts zu
+            installieren. Nach dem Anmelden bekommst du eine Adresse, die dich
+            beim Öffnen abonniert.</p>
         </div>
       </li>
 
@@ -653,16 +755,6 @@ ab <span id="onset-time">14:45</span> · 1.8 mm, Spitze 3.2 mm/h</div>
                   <input type="time" id="t-morning" name="at_morning" value="08:00" step="300">
                 </span>
               </div>
-              <!--telegram:start-->
-              <div class="pick">
-                <input type="checkbox" id="want-telegram" name="telegram" value="1">
-                <label class="pick-text" for="want-telegram">
-                  <strong>Auch per Telegram</strong>
-                  <span>Zusätzlich zur ntfy-App, über @gleichnass_bot.
-                    Im nächsten Schritt einmal antippen, fertig.</span>
-                </label>
-              </div>
-              <!--telegram:end-->
             </fieldset>
             <!--invite-->
 
@@ -678,10 +770,21 @@ ab <span id="onset-time">14:45</span> · 1.8 mm, Spitze 3.2 mm/h</div>
       <li class="flow-step" id="step-test" data-state="todo">
         <span class="flow-num" aria-hidden="true"><b>3</b><i>✓</i></span>
         <div class="flow-body">
-          <!--step3:start--><h3>QR-Code scannen und testen</h3>
-          <p>Gleich nach dem Anmelden bekommst du einen QR-Code. Einmal mit dem
-            Handy scannen, Testnachricht schicken, fertig. Ab dann meldet sich
-            GleichNass von selbst.</p><!--step3:end-->
+          <!--step3:start--><h3 class="way-then" data-way="ntfy">QR-Code scannen und testen</h3>
+          <p class="way-then" data-way="ntfy">Gleich nach dem Anmelden bekommst du einen QR-Code.
+            Einmal mit dem Handy scannen, Testnachricht schicken, fertig. Ab dann
+            meldet sich GleichNass von selbst.</p><!--step3:end-->
+          <!--telegram:start-->
+          <h3 class="way-then" data-way="telegram" hidden>Bot öffnen und testen</h3>
+          <p class="way-then" data-way="telegram" hidden>Gleich nach dem Anmelden bekommst du
+            einen Knopf, der Telegram beim Bot öffnet und deinen Code abschickt.
+            Testnachricht schicken, fertig. Ab dann meldet sich GleichNass von
+            selbst.</p>
+          <!--telegram:end-->
+          <h3 class="way-then" data-way="web" hidden>Seite öffnen und testen</h3>
+          <p class="way-then" data-way="web" hidden>Gleich nach dem Anmelden bekommst du eine
+            Adresse. Einmal öffnen, Mitteilungen erlauben, Testnachricht schicken,
+            fertig. Ab dann meldet sich GleichNass von selbst.</p>
         </div>
       </li>
     </ol>
@@ -690,15 +793,15 @@ ab <span id="onset-time">14:45</span> · 1.8 mm, Spitze 3.2 mm/h</div>
     <div class="aside-card">
       <h3>Lieber Telegram?</h3>
       <p>
-        Wenn du Telegram sowieso nutzt, brauchst du gar keine neue App. Setz
-        oben den Haken bei „Auch per Telegram“. Nach dem Anmelden bekommst du
-        einen Knopf, der Telegram beim Bot öffnet und deinen Code abschickt.
-        Mehr ist es nicht: keine Chat-ID heraussuchen, kein Warten auf jemanden,
-        der dich freischaltet.
+        Wenn du Telegram sowieso nutzt, brauchst du gar keine neue App. Wähl
+        oben Telegram: nach dem Anmelden bekommst du einen Knopf, der Telegram
+        beim Bot öffnet und deinen Code abschickt. Mehr ist es nicht, keine
+        Chat-ID heraussuchen, kein Warten auf jemanden, der dich freischaltet.
       </p>
       <p>
-        Beides gleichzeitig geht auch. Dann kommen die Meldungen auf die
-        ntfy-App <em>und</em> nach Telegram, etwa aufs Handy und aufs Tablet.
+        Unsicher? Nimm die ntfy-App. Sie ist der zuverlässigste Weg, und sie
+        erfährt nichts über dich, was <a href="https://ntfy.sh">ntfy</a> nicht
+        ohnehin für die Zustellung braucht.
       </p>
     </div>
     <!--telegram:end-->
@@ -823,39 +926,66 @@ docker compose up -d</pre>
     setInterval(tick, 10000);
   })();
 
-  // Step 2 waits for step 1. Progressive enhancement on purpose: the form is
-  // enabled in the markup, and only this script locks it, so the page still
-  // works with no JavaScript at all.
+  // Step 1 is a choice, and the rest of the page follows from it: everything
+  // that only makes sense for one way carries data-way, and exactly one set is
+  // shown. Progressive enhancement on purpose - the markup ships with the first
+  // way chosen and the form enabled, and only this script narrows and locks it,
+  // so the page still works with no JavaScript at all.
   (function () {
-    const app = document.getElementById('step-app');
+    const choice = document.getElementById('step-way');
     const step = document.getElementById('step-form');
     const form = document.getElementById('anmelden');
     const button = document.getElementById('app-done');
     const hint = document.getElementById('form-hint');
-    if (!app || !step || !form || !button) return;
+    const ways = document.querySelectorAll('input[name="way"]');
+    if (!choice || !step || !form || !ways.length) return;
 
+    const variants = document.querySelectorAll('.way-then');
     const controls = form.querySelectorAll('input, select, button');
     const waiting = 'Erst Schritt 1: installiere ntfy und bestätige es oben.';
     const ready = hint ? hint.textContent : '';
+    // A rejected submission comes back with the form filled in and an error on
+    // it; re-locking there would trap someone who has already got this far.
+    let installed = !!form.querySelector('.err');
+
+    function chosen() {
+      const picked = document.querySelector('input[name="way"]:checked');
+      return picked ? picked.value : 'ntfy';
+    }
 
     function lock(locked) {
       step.dataset.state = locked ? 'todo' : 'active';
-      controls.forEach((c) => { c.disabled = locked; });
+      controls.forEach(function (c) { c.disabled = locked; });
       if (hint) hint.textContent = locked ? waiting : ready;
     }
 
-    // A rejected submission comes back with the form filled in and an error on
-    // it; re-locking there would trap someone who has already got this far.
-    if (!form.querySelector('.err')) lock(true);
+    function settle(moved) {
+      const way = chosen();
+      variants.forEach(function (el) { el.hidden = el.dataset.way !== way; });
+      // Only the app has to be installed first, so only the app gets a gate.
+      const open = way !== 'ntfy' || installed;
+      choice.dataset.state = open ? 'done' : 'active';
+      lock(!open);
+      if (moved && open) {
+        document.getElementById('name').focus({ preventScroll: true });
+        step.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
 
-    button.addEventListener('click', function () {
-      app.dataset.state = 'done';
-      button.disabled = true;
-      button.textContent = 'Erledigt';
-      lock(false);
-      document.getElementById('name').focus({ preventScroll: true });
-      step.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    ways.forEach(function (radio) {
+      radio.addEventListener('change', function () { settle(true); });
     });
+
+    if (button) {
+      button.addEventListener('click', function () {
+        installed = true;
+        button.disabled = true;
+        button.textContent = 'Erledigt';
+        settle(true);
+      });
+    }
+
+    settle(false);
   })();
 
   // Place autocomplete. Suggestions come from our own /places endpoint, which

@@ -118,11 +118,23 @@ Run the site and send them the link. That is the whole procedure.
 gleichnass serve --host 0.0.0.0        # or: docker compose up -d
 ```
 
-It serves the landing page with a registration form on it. Someone fills in
-their name, their town and which alerts they want; the server geocodes the
-town, generates a private ntfy topic, writes `users.d/<name>.yaml` and hands
-them their subscription: a QR code on a computer, a button on a phone. Nothing else is touched, so the
-config you maintain by hand keeps its comments.
+It serves the landing page with a registration form on it. The first step is a
+choice of how the alerts should reach them - the ntfy app, Telegram, or ntfy's
+web app in the browser - each card listing what that way gives and what it
+costs. Everything after it follows from that choice. Then they fill in their
+name, their town and which alerts they want; the server geocodes the town,
+generates a private ntfy topic where one is needed, writes
+`users.d/<name>.yaml` and hands them their subscription: a QR code on a
+computer, a button on a phone. Nothing else is touched, so the config you
+maintain by hand keeps its comments.
+
+The three ways differ only in what happens after the form:
+
+| Way | Channel written | What the confirmation page does |
+| --- | --- | --- |
+| `ntfy` | `ntfy` with a fresh topic | App shops, then the topic into the app - deep link, QR or clipboard, by device |
+| `web` | `ntfy` with a fresh topic | The topic's own URL, which subscribes on open, plus how to keep it pushing |
+| `telegram` | none yet, only `telegram_code` | The `t.me` link that hands the bot the code |
 
 **Registration is open by default.** Two things keep that from being a
 liability:
@@ -156,8 +168,8 @@ defaults:
       token: ${GLEICHNASS_TELEGRAM_TOKEN}
 ```
 
-People tick "Auch per Telegram" when they register. The confirmation page then
-shows a button that opens the bot with a one-time code already filled in
+People pick "Telegram" as their way in when they register. The confirmation
+page then shows a button that opens the bot with a one-time code already filled in
 (`https://t.me/<bot>?start=CODE`); the next `gleichnass run` sees the code in the
 bot's updates and writes the chat id into their user file. Nobody looks up a
 chat id and nobody edits YAML.
@@ -171,8 +183,13 @@ if you would rather add someone yourself:
 gleichnass add-user --name "Anna" --place Hamburg --telegram-chat 12345678
 ```
 
+A Telegram signup is written with no channel at all, only its `telegram_code`:
+there is nothing to deliver to until the person has messaged the bot. That is a
+normal half-finished signup rather than a broken file, so it does not stop the
+config loading, and the run that claims the code fills the channel in.
+
 **ntfy and Telegram run in parallel.** Every notification goes to each channel a
-person has, which is useful while trying Telegram out or to reach a tablet as
+person has, so someone added by hand can have both - useful to reach a tablet as
 well as a phone. If one channel is down or misconfigured the other still gets
 the alert, and the shower counts as announced, so the working channel is not
 told about it again on every tick until the broken one recovers:
@@ -361,15 +378,20 @@ config file.
   reach it - the only route in is the topic field. So iPhones get the topic in
   one tap on the clipboard, and, for anyone who would rather not paste at all,
   ntfy's web app: opening `https://<server>/<topic>` subscribes by itself, and
-  added to the home screen it can push as well.
+  added to the home screen it can push as well. That last route is offered
+  outright as the `web` way, whose second step is the honest part: Safari
+  refuses a page notification permission entirely until it has been added to
+  the home screen.
 - **The Telegram bot is identified from its token**, via `getMe`. Setting the
   token used not to be enough: the site also wanted the bot's name in the config
   file, which lives inside the deployment's volume, so a token in the
   environment quietly did nothing.
-- **Only the ntfy topic can trigger a test notification.** Ids used to be first
-  names, so `/test` was something a stranger could aim at someone else's phone.
-  The topic is the secret handed out at signup, and anyone holding it could
-  publish to that topic directly anyway.
+- **A test notification has to be proved for.** Ids used to be first names, so
+  `/test` was something a stranger could aim at someone else's phone. An ntfy
+  signup proves itself with its topic: it is the secret handed out at signup,
+  and anyone holding it could publish to that topic directly anyway. A Telegram
+  signup has no topic, so its leaving token stands in - equally theirs, and
+  already on the page the button sits on.
 
 ## Tests
 

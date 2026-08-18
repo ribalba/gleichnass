@@ -48,10 +48,30 @@ STYLE_BLOCK = re.compile(r"<style>.*?</style>", re.S)
 TELEGRAM_BLOCK = re.compile(r"[ \t]*<!--telegram:start-->.*?<!--telegram:end-->\n?", re.S)
 STORES_BLOCK = re.compile(r"<!--stores:start-->.*?<!--stores:end-->", re.S)
 STEP3_BLOCK = re.compile(r"<!--step3:start-->.*?<!--step3:end-->", re.S)
+WAY_INPUT = re.compile(r'(<input type="radio" name="way" value=")([a-z]+)("[^>]*?)( checked)?(>)')
 TEMPLATE_BOT = "gleichnass_bot"
 # Long, because places do not move. Not unlimited, so a name that was
 # missing from the geocoder one day can turn up later.
 PLACE_CACHE_AGE = timedelta(days=90)
+
+# How someone wants the alerts to reach them, chosen as the first step of the
+# flow. "ntfy" and "web" are the same channel - the app and ntfy's own web app
+# both listen on one topic - and differ only in what the pages after signup
+# tell you to do with it. "telegram" is a channel of its own, and the only one
+# that cannot be set up before the person has messaged the bot.
+WAYS = ("ntfy", "telegram", "web")
+DEFAULT_WAY = "ntfy"
+
+
+def clean_way(value: str, telegram: bool = True) -> str:
+    """The way a visitor picked, or the default if the form said something we
+    do not offer. Telegram is refused rather than defaulted when no bot is
+    configured, since that is a forged form, not a stale one."""
+    way = (value or "").strip()
+    if way == "telegram" and not telegram:
+        raise ValueError("telegram is not set up here")
+    return way if way in WAYS else DEFAULT_WAY
+
 
 # A bot's username never changes, so ask Telegram once per token and keep it.
 _BOT_NAMES: dict[str, str | None] = {}
@@ -288,9 +308,23 @@ def _shell(title: str, body: str) -> bytes:
     ).encode()
 
 
+def _check_way(page: str, way: str) -> str:
+    """Move the tick to the way that was picked.
+
+    Only matters when the form comes back with an error on it: the page is
+    rendered again from the template, and someone who chose Telegram should not
+    find themselves back on the app.
+    """
+    def swap(match):
+        picked = " checked" if match.group(2) == way else ""
+        return match.group(1) + match.group(2) + match.group(3) + picked + match.group(5)
+
+    return WAY_INPUT.sub(swap, page)
+
+
 def landing(error: str = "", invite_needed: bool = False,
             telegram_bot: str | None = None, base_url: str = "",
-            platform: str = "desktop") -> bytes:
+            platform: str = "desktop", way: str = DEFAULT_WAY) -> bytes:
     """The landing page, with the form's optional parts filled in.
 
     The template is valid on its own: every hook is an HTML comment, so opening
@@ -298,6 +332,8 @@ def landing(error: str = "", invite_needed: bool = False,
     what the wording assumes and what a phone gets swapped out here.
     """
     page = _template()
+    if way != DEFAULT_WAY:
+        page = _check_way(page, way)
     if platform != "desktop":
         page = STORES_BLOCK.sub(store_links(platform), page)
         page = STEP3_BLOCK.sub(
@@ -344,18 +380,18 @@ def _qr(target: str) -> str:
 
 
 def _ntfy_step(topic: str, abo_url: str, server: str, platform: str, place: str,
-               telegram: bool = False) -> str:
-    """Step two: the topic, into the app, by whichever route this device has."""
+               telegram: bool = False, n: int = 2) -> str:
+    """The topic, into the app, by whichever route this device has."""
     if platform == "ios":
         # No page can hand a topic to the iOS app - it registers no ntfy://
         # scheme and claims no https address - so the clipboard is the shortest
         # honest route, with the web app for anyone who would rather not paste.
         web_url = f"{server.rstrip('/')}/{topic}"
         instead = ('<p class="privacy" style="margin-top:.7rem">Zu umständlich? '
-                   "Auf dem iPhone ist Telegram der kürzere Weg, dafür genügt "
-                   "Schritt 3.</p>") if telegram else ""
+                   "Auf dem iPhone ist Telegram der kürzere Weg, dafür "
+                   "genügt der nächste Schritt.</p>") if telegram else ""
         return f"""<div>
-    <strong>2. Thema in ntfy eintragen</strong>
+    <strong>{n}. Thema in ntfy eintragen</strong>
     <p class="privacy" style="margin-top:.3rem">
       Tippe auf den Knopf, öffne ntfy, tippe auf <em>+</em> und füge den Namen
       ins Feld „Thema“ ein. Sonst nichts ändern.
@@ -372,7 +408,7 @@ def _ntfy_step(topic: str, abo_url: str, server: str, platform: str, place: str,
     if platform in ("android", "mobile"):
         deep = deep_link(topic, place[:40] or "GleichNass", server)
         return f"""<div>
-    <strong>2. Thema abonnieren</strong>
+    <strong>{n}. Thema abonnieren</strong>
     <p class="privacy" style="margin-top:.3rem">
       Einmal tippen: ntfy öffnet sich und ist danach abonniert.
     </p>
@@ -386,7 +422,7 @@ def _ntfy_step(topic: str, abo_url: str, server: str, platform: str, place: str,
     <p class="privacy" style="margin-top:.7rem">{_topic_note(topic)}</p>
   </div>"""
     return f"""<div>
-    <strong>2. Code scannen, die App öffnet sich</strong>
+    <strong>{n}. Code scannen, die App öffnet sich</strong>
     {_qr(abo_url)}
     <p class="privacy" style="margin-top:.7rem">
       Auf Android landest du direkt in ntfy und bist abonniert. Auf dem iPhone
@@ -400,13 +436,56 @@ def _ntfy_step(topic: str, abo_url: str, server: str, platform: str, place: str,
   </div>"""
 
 
-def _telegram_step(link: str, bot: str, code: str, platform: str) -> str:
-    """Step three, where Telegram is wanted. t.me links open the app on both
+def _webapp_steps(topic: str, server: str, platform: str) -> str:
+    """The way in that installs nothing: ntfy's own web app.
+
+    Opening https://ntfy.sh/<topic> subscribes the browser to that topic on its
+    own, which is the whole of the first step. The second step is the honest
+    part - a plain tab keeps receiving only for as long as the browser feels
+    like it, and on iOS a page is refused notification permission entirely
+    until it has been added to the home screen.
+    """
+    url = f"{server.rstrip('/')}/{topic}"
+    if platform == "desktop":
+        open_it = f"""{_qr(url)}
+    <p class="privacy" style="margin-top:.7rem">
+      Scanne den Code mit dem Handy, oder öffne
+      <a href="{html.escape(url)}">{html.escape(url)}</a> gleich hier.
+    </p>"""
+    else:
+        open_it = f"""<p style="margin-top:.8rem">
+      <a class="btn btn-go btn-block" href="{html.escape(url)}">Im Browser abonnieren</a>
+    </p>"""
+    if platform == "ios":
+        pin = ("Tippe unten auf „Teilen“, dann auf „Zum Home-Bildschirm“. Öffne "
+               "die Seite einmal von dort und erlaube Mitteilungen. Ohne diesen "
+               "Schritt darf dir eine Seite auf dem iPhone nichts schicken.")
+    else:
+        pin = ("Erlaube der Seite Mitteilungen, wenn sie danach fragt. Über das "
+               "Browser-Menü „Zum Startbildschirm hinzufügen“ bleibt das Abo "
+               "auch dann bestehen, wenn du den Tab schließt.")
+    return f"""<div>
+    <strong>1. Abo im Browser öffnen</strong>
+    <p class="privacy" style="margin-top:.3rem">
+      Die Seite abonniert dich beim Öffnen von selbst. Nichts installieren,
+      kein Konto.
+    </p>
+    {open_it}
+    <p class="privacy" style="margin-top:.7rem">{_topic_note(topic)}</p>
+  </div>
+  <div>
+    <strong>2. Mitteilungen erlauben</strong>
+    <p class="privacy" style="margin-top:.3rem">{pin}</p>
+  </div>"""
+
+
+def _telegram_step(link: str, bot: str, code: str, platform: str, n: int = 3) -> str:
+    """The step where Telegram is wanted. t.me links open the app on both
     phones, so unlike ntfy this needs no per-platform detour - only the code
     is pointless on the device Telegram is not on."""
     if platform == "desktop":
         return f"""<div>
-    <strong>3. Telegram verbinden</strong>
+    <strong>{n}. Telegram verbinden</strong>
     <p class="privacy" style="margin-top:.3rem">
       Scanne diesen Code mit dem Handy: Telegram öffnet sich beim Bot und
       schickt deinen Code ab. Wenige Minuten später kommen die Meldungen auch dort an.
@@ -421,7 +500,7 @@ def _telegram_step(link: str, bot: str, code: str, platform: str) -> str:
     </p>
   </div>"""
     return f"""<div>
-    <strong>3. Telegram verbinden</strong>
+    <strong>{n}. Telegram verbinden</strong>
     <p class="privacy" style="margin-top:.3rem">
       Einmal tippen: Telegram öffnet sich beim Bot und schickt deinen Code ab.
       Wenige Minuten später kommen die Meldungen auch dort an.
@@ -436,50 +515,77 @@ def _telegram_step(link: str, bot: str, code: str, platform: str) -> str:
   </div>"""
 
 
+# How much is left to do per way, and whether it is worth adding "auf dem
+# Handy" when the page is on a computer. The browser way never says it: it is
+# usually finished on whichever screen is already reading this.
+_HANDS = {
+    "ntfy": ("Noch zwei Handgriffe", True),
+    "web": ("Noch zwei Handgriffe", False),
+    "telegram": ("Noch ein Handgriff", True),
+}
+
+
 def welcome(entry: dict, topic: str, topic_url: str, place: str,
             telegram_bot: str | None = None, code: str | None = None,
             leave_url: str = "", platform: str = "desktop",
-            server: str = "https://ntfy.sh") -> str:
-    """The page after signing up, tailored to whatever is reading it.
+            server: str = "https://ntfy.sh", way: str = DEFAULT_WAY) -> str:
+    """The page after signing up, tailored to the way chosen and to whatever is
+    reading it.
 
     On a computer the phone is a second screen and the QR code bridges the two.
     On a phone there is nothing to bridge, so the codes give way to buttons
     that go straight where the code would have pointed.
     """
-    telegram_step = ""
+    steps = []
+    done = 0
+    if topic and way == "web":
+        steps.append(_webapp_steps(topic, server, platform))
+        done = 2
+    elif topic:
+        steps.append(f"""<div>
+    <strong>1. ntfy installieren</strong>
+    <p class="stores">
+            {store_links(platform)}
+          </p>
+  </div>""")
+        steps.append(_ntfy_step(topic, topic_url, server, platform, place,
+                                bool(telegram_bot and code), n=2))
+        done = 2
     if telegram_bot and code:
-        telegram_step = _telegram_step(
-            telegram_link.deep_link(telegram_bot, code), telegram_bot, code, platform
-        )
+        # Telegram is a way of its own now, so it is usually the only step on
+        # the page and has to be able to be step one.
+        steps.append(_telegram_step(telegram_link.deep_link(telegram_bot, code),
+                                    telegram_bot, code, platform, n=done + 1))
+
     modes = "".join(f"<li>{html.escape(describe_rule(rule))}</li>" for rule in entry["rules"])
     leave_note = ""
     if leave_url:
         leave_note = (
             f'<a href="{html.escape(leave_url)}">Wieder abmelden</a> &nbsp;·&nbsp; '
         )
-    hands = ("Noch zwei Handgriffe auf dem Handy" if platform == "desktop"
-             else "Noch zwei Handgriffe")
+    # The test button proves the person is who the page was made for. The topic
+    # is the secret an ntfy signup was just handed; a Telegram-only one has no
+    # topic, so their own leaving token stands in - it is equally theirs, and
+    # equally already on this page.
+    proof = (f'<input type="hidden" name="topic" value="{html.escape(topic)}">' if topic
+             else '<input type="hidden" name="token" '
+                  f'value="{html.escape(str(entry.get("unsubscribe", "")))}">')
+    words, on_phone = _HANDS.get(way, ("Noch zwei Handgriffe", False))
+    hands = f"{words} auf dem Handy" if on_phone and platform == "desktop" else words
     return f"""
 <h1 style="margin-bottom:.8rem">Fast geschafft, {html.escape(entry['name'])}.</h1>
 <p class="lede">{hands}, dann meldet sich
    GleichNass für {html.escape(place)} von selbst.</p>
 
 <div class="signup" style="margin-top:2rem">
-  <div>
-    <strong>1. ntfy installieren</strong>
-    <p class="stores">
-            {store_links(platform)}
-          </p>
-  </div>
-  {_ntfy_step(topic, topic_url, server, platform, place, bool(telegram_step))}
+  {"".join(steps)}
   <div>
     <strong>Du bekommst</strong>
     <ul style="margin:.4rem 0 0;padding-left:1.1rem;color:var(--muted)">{modes}</ul>
   </div>
-  {telegram_step}
   <form method="post" action="/test">
     <input type="hidden" name="user" value="{html.escape(entry['id'])}">
-    <input type="hidden" name="topic" value="{html.escape(topic)}">
+    {proof}
     <button class="btn btn-go" type="submit" style="width:100%;justify-content:center">
       Testnachricht schicken
     </button>
@@ -532,23 +638,29 @@ def _forecast_reaches(client, config, location: Location) -> bool:
 _CHANNEL_WORDS = {"ntfy": "die ntfy-App", "telegram": "Telegram"}
 
 
-def _test_result(sent: list[str], failed: list[tuple[str, str]], user) -> str:
+def _test_result(sent: list[str], failed: list[tuple[str, str]],
+                 waiting_for_telegram: bool = False) -> str:
     """Say where the test actually went. "Unterwegs" is not much help when
     somebody is standing there wondering why Telegram stayed quiet."""
     where = " und ".join(_CHANNEL_WORDS.get(c, c) for c in sent)
-    waiting = user.unsubscribe and any(
-        c.type == "telegram" for c in user.channels
-    )
+    telegram_note = ('<p class="note" style="margin-top:1rem">Telegram ist noch nicht '
+                     "verbunden. Öffne dafür den Bot über den Knopf oder den QR-Code "
+                     "auf der vorigen Seite, dann probiere es noch einmal.</p>"
+                     ) if waiting_for_telegram else ""
+
+    if not sent and not failed:
+        # A Telegram signup has no channel at all until the bot has heard from
+        # them, so there was nothing to fail - and nothing to send either.
+        return ("<h1>Noch nichts zu schicken.</h1>"
+                '<p class="lede">Es hängt noch keine Zustellung an deiner Anmeldung.</p>'
+                f"{telegram_note}"
+                '<p class="note" style="margin-top:1.2rem">'
+                '<a href="/">Zurück zur Startseite</a></p>')
 
     if sent and not failed:
-        note = ""
-        if not any(c.type == "telegram" for c in user.channels):
-            note = ('<p class="note" style="margin-top:1rem">Telegram ist noch nicht '
-                    "verbunden. Öffne dafür den Bot über den Knopf oder den QR-Code "
-                    "auf der vorigen Seite, dann probiere es noch einmal.</p>")
         return (f"<h1>Unterwegs an {html.escape(where)}.</h1>"
                 '<p class="lede">Kommt nichts an, prüfe, ob du das Thema in der App '
-                f"wirklich abonniert hast.</p>{note}"
+                f"wirklich abonniert hast.</p>{telegram_note}"
                 '<p class="note" style="margin-top:1.2rem">'
                 '<a href="/">Zurück zur Startseite</a></p>')
 
@@ -559,6 +671,7 @@ def _test_result(sent: list[str], failed: list[tuple[str, str]], user) -> str:
     head = (f"<h1>Teilweise geklappt.</h1><p class=\"lede\">Unterwegs an "
             f"{html.escape(where)}.</p>") if sent else "<h1>Das hat nicht geklappt.</h1>"
     return (f"{head}<ul class=\"note\" style=\"margin-top:1rem\">{problems}</ul>"
+            f"{telegram_note}"
             '<p class="note" style="margin-top:1.2rem"><a href="/">Zurück</a></p>')
 
 
@@ -869,17 +982,23 @@ class Handler(BaseHTTPRequestHandler):
             )
 
         form = self._form()
+        bot = telegram_bot_for(config)
+        try:
+            way = clean_way(form.get("way", [""])[0], bool(bot))
+        except ValueError:
+            return self._reject(config, "Telegram ist hier nicht eingerichtet.")
+
         invite = config.signup.invite_code
         if invite and not _same_secret(form.get("code", [""])[0], invite):
-            return self._reject(config, "Der Einladungscode stimmt nicht.")
+            return self._reject(config, "Der Einladungscode stimmt nicht.", way)
 
         name = (form.get("name", [""])[0] or "").strip()[:60]
         place = (form.get("place", [""])[0] or "").strip()[:80]
         modes = [m for m in form.get("modes", []) if m in PRESETS]
         if not name or not place:
-            return self._reject(config, "Bitte Name und Ort ausfüllen.")
+            return self._reject(config, "Bitte Name und Ort ausfüllen.", way)
         if not modes:
-            return self._reject(config, "Bitte mindestens eine Meldung auswählen.")
+            return self._reject(config, "Bitte mindestens eine Meldung auswählen.", way)
 
         # Each mode carries its own time, so people are not stuck with 20:00.
         options = {
@@ -895,11 +1014,13 @@ class Handler(BaseHTTPRequestHandler):
                     "Die Vorlaufzeit muss zwischen 15 Minuten und 12 Stunden liegen."
                     if preset == "imminent"
                     else "Bitte eine gültige Uhrzeit angeben."
-                ))
+                ), way)
 
-        bot = telegram_bot_for(config)
-        wants_telegram = bool(form.get("telegram")) and bool(bot)
-        code = telegram_link.new_code() if wants_telegram else None
+        code = telegram_link.new_code() if way == "telegram" else None
+        # ntfy and its web app are one channel listening on one topic; Telegram
+        # has nothing to write down until the person has messaged the bot, so
+        # they start with no channel and the code claims one later.
+        channels = [] if way == "telegram" else [{"type": "ntfy"}]
         picked = _picked_location(form, place)
 
         try:
@@ -909,16 +1030,16 @@ class Handler(BaseHTTPRequestHandler):
                     return self._reject(config, (
                         f"Für „{location.name or place}“ bekomme ich gerade keine "
                         "Wetterdaten. Bitte einen Ort aus der Vorschlagsliste wählen."
-                    ))
+                    ), way)
                 created = signup.create(
                     config, name=name, location=location, place=place, presets=modes,
-                    options=options, telegram_code=code, client=client,
+                    options=options, telegram_code=code, channels=channels, client=client,
                 )
         except LookupError:
-            return self._reject(config, f"Den Ort „{place}“ konnte ich nicht finden.")
+            return self._reject(config, f"Den Ort „{place}“ konnte ich nicht finden.", way)
         except Exception as error:  # noqa: BLE001
             log.exception("signup failed")
-            return self._reject(config, f"Das hat leider nicht geklappt: {error}")
+            return self._reject(config, f"Das hat leider nicht geklappt: {error}", way)
 
         log.info("signed up %s (%s)", created.entry["id"], created.path)
         server = str(
@@ -926,14 +1047,15 @@ class Handler(BaseHTTPRequestHandler):
         ).rstrip("/")
         # The QR points at our own /abo page, which forwards into the app.
         where = created.location.name or place
-        qr_target = f"{self._base_url(config)}/abo/{created.topic}?ort={quote(where[:40])}"
+        qr_target = (f"{self._base_url(config)}/abo/{created.topic}?ort={quote(where[:40])}"
+                     if created.topic else "")
         self._send(
             200,
             _shell(
                 "Fast geschafft",
-                welcome(created.entry, created.topic, qr_target, where,
+                welcome(created.entry, created.topic or "", qr_target, where,
                         telegram_bot=bot, code=code, platform=self._platform(),
-                        server=server,
+                        server=server, way=way,
                         leave_url=f"{self._base_url(config)}/abbestellen"
                                   f"?u={quote(created.entry['id'])}"
                                   f"&t={quote(created.entry['unsubscribe'])}"),
@@ -951,23 +1073,27 @@ class Handler(BaseHTTPRequestHandler):
         except KeyError:
             return self._not_found()
 
-        # User ids are people's first names, so knowing one proves nothing.
-        # The topic is the secret they were just given, and anyone who has it
-        # could publish to that topic directly anyway, so it is the right key
-        # for "yes, this really is your own signup".
-        topics = [
+        # User ids are people's first names, so knowing one proves nothing. The
+        # topic is the secret an ntfy signup was just given, and anyone holding
+        # it could publish to that topic directly anyway. A Telegram-only signup
+        # has no topic, so their leaving token stands in: it is equally theirs,
+        # and it is already on the page this button sits on.
+        proofs = [
             c.settings.get("topic", "") for c in user.channels
             if c.type == "ntfy" and c.settings.get("topic")
         ]
-        offered = form.get("topic", [""])[0]
-        if not topics or not any(_same_secret(offered, t) for t in topics):
+        if user.unsubscribe:
+            proofs.append(user.unsubscribe)
+        offered = form.get("topic", [""])[0] or form.get("token", [""])[0]
+        if not offered or not any(_same_secret(offered, p) for p in proofs):
             log.warning("rejected /test for %s from %s", user.id, self._client())
             return self._send(403, _shell("Nicht erlaubt", "<h1>Nicht erlaubt.</h1>"))
 
         # Registration only stores a Telegram code; the channel is attached when
         # the code reaches the bot. Claim it here, or pressing this button right
-        # after scanning would quietly test ntfy alone.
-        user = self._claim_telegram(config, user)
+        # after scanning would quietly test ntfy alone - or, for a Telegram-only
+        # signup, find nothing to test at all.
+        user, waiting = self._claim_telegram(config, user)
 
         sent, failed = [], []
         note = message.test_notification(user)
@@ -981,24 +1107,30 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     sent.append(spec.type)
 
-        self._send(200, _shell("Test", _test_result(sent, failed, user)))
+        self._send(200, _shell("Test", _test_result(sent, failed, waiting)))
 
     def _claim_telegram(self, config, user):
-        """Attach a Telegram chat that has just messaged the bot, and return
-        the user as they now stand."""
+        """Attach a Telegram chat that has just messaged the bot.
+
+        Returns the user as they now stand, and whether a code of theirs is
+        still unclaimed - which is the difference between "nothing arrived" and
+        "you have not opened the bot yet".
+        """
         token = (config.defaults["channels"].get("telegram") or {}).get("token")
         if not token or user.id not in telegram_link.pending(config):
-            return user
+            return user, False
         try:
             with httpx.Client(timeout=10.0) as client:
                 telegram_link.link_waiting(config, client, token)
         except Exception as error:  # noqa: BLE001
             log.warning("could not claim Telegram links: %s", error)
-            return user
+            return user, True
+        config = self._config()
         try:
-            return self._config().user(user.id)
+            user = config.user(user.id)
         except KeyError:
-            return user
+            return user, True
+        return user, user.id in telegram_link.pending(config)
 
     # -- plumbing --------------------------------------------------------
 
@@ -1016,9 +1148,10 @@ class Handler(BaseHTTPRequestHandler):
             raise BadRequest("form missing or too large")
         return parse_qs(self.rfile.read(length).decode("utf-8", "replace"))
 
-    def _reject(self, config, error: str):
+    def _reject(self, config, error: str, way: str = DEFAULT_WAY):
         self._send(400, landing(error, bool(config.signup.invite_code),
-                                telegram_bot_for(config), platform=self._platform()))
+                                telegram_bot_for(config), platform=self._platform(),
+                                way=way))
 
     def _not_found(self):
         self._send(404, _shell("Nicht gefunden", '<h1>Nicht gefunden</h1>'

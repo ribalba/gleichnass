@@ -107,11 +107,11 @@ def test_the_welcome_page_shows_the_topic_and_a_scannable_code():
 def test_telegram_is_offered_only_where_a_bot_is_configured():
     """Better no option than one that cannot work."""
     without = web.landing().decode()
-    assert 'name="telegram"' not in without
-    assert "Lieber Telegram" not in without, "and no card pointing at a missing box"
+    assert 'value="telegram"' not in without
+    assert "Lieber Telegram" not in without, "and no card pointing at a missing choice"
 
     with_bot = web.landing(telegram_bot="gleichnass_bot").decode()
-    assert 'name="telegram"' in with_bot
+    assert 'value="telegram"' in with_bot
     assert "@gleichnass_bot" in with_bot
     assert "Lieber Telegram" in with_bot
 
@@ -506,3 +506,120 @@ def test_the_handler_asks_the_request_who_is_looking():
     request = FakeRequest({}, {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)"})
     request._platform = web.Handler._platform.__get__(request)
     assert request._platform() == "ios"
+
+
+# -- which way in ---------------------------------------------------------
+
+
+def _checked_ways(page: str) -> list[str]:
+    import re
+
+    return [m.group(1) for m in
+            re.finditer(r'<input type="radio" name="way" value="(\w+)"[^>]* checked>', page)]
+
+
+def test_the_first_step_is_a_choice_between_three_ways():
+    """Two of them need no app at all, and nobody can guess that from a page
+    that only ever mentions ntfy."""
+    page = web.landing(telegram_bot="gleichnass_bot").decode()
+
+    for way in web.WAYS:
+        assert f'<input type="radio" name="way" value="{way}"' in page
+    assert page.count('<input type="radio"') == 3, "one choice, not a pile of checkboxes"
+    # The radios live outside the form and are pulled in by the form attribute,
+    # so step 1 does not have to wrap the whole of step 2.
+    assert page.count('form="anmelden"') == 3
+
+
+def test_every_way_says_what_it_costs_as_well_as_what_it_gives():
+    page = web.landing(telegram_bot="gleichnass_bot").decode()
+    assert page.count('class="pro"') >= 6, "two upsides each"
+    assert page.count('class="con"') >= 3, "and at least one honest downside"
+
+
+def test_the_first_way_is_picked_for_anyone_who_never_chooses():
+    """No JavaScript, no interaction: the form still submits something valid."""
+    page = web.landing().decode()
+    assert 'name="way" value="ntfy" id="way-ntfy" form="anmelden" checked>' in page
+    assert _checked_ways(page) == ["ntfy"]
+
+
+def test_a_rejected_form_comes_back_on_the_way_that_was_chosen():
+    """Otherwise an error message quietly moves someone back to the app."""
+    page = web.landing("Bitte Name und Ort ausfüllen.",
+                       telegram_bot="gleichnass_bot", way="telegram").decode()
+    assert 'value="telegram" id="way-telegram" form="anmelden" checked>' in page
+    assert _checked_ways(page) == ["telegram"]
+
+
+def test_a_way_we_do_not_offer_falls_back_to_the_first():
+    assert web.clean_way("") == "ntfy"
+    assert web.clean_way("carrier-pigeon") == "ntfy"
+    assert web.clean_way("web") == "web"
+    assert web.clean_way("telegram") == "telegram"
+
+
+def test_telegram_is_refused_rather_than_quietly_swapped():
+    """A form saying telegram where no bot exists was forged, not stale, and
+    signing that person up for ntfy instead would be a lie."""
+    with pytest.raises(ValueError):
+        web.clean_way("telegram", telegram=False)
+
+
+def test_the_browser_way_never_asks_anyone_to_install_anything():
+    entry = {"id": "u", "name": "Didi", "rules": [{"preset": "night"}]}
+    page = web.welcome(entry, "gleichnass-abc", "https://x.test/abo/gleichnass-abc",
+                       "Konstanz", way="web")
+
+    assert "apps.apple.com" not in page and "play.google" not in page
+    assert "https://ntfy.sh/gleichnass-abc" in page, "the web app subscribes on open"
+    assert "ntfy://" not in page, "and nothing pointing at an app they did not install"
+    assert "Mitteilungen erlauben" in page, "the part that actually decides whether it works"
+
+
+def test_the_browser_way_says_what_the_iphone_needs():
+    """Safari refuses a page notification permission until it has been added to
+    the home screen, so leaving that out would just look broken."""
+    entry = {"id": "u", "name": "Didi", "rules": [{"preset": "night"}]}
+    page = web.welcome(entry, "abc", "https://x.test/abo/abc", "Konstanz",
+                       way="web", platform="ios")
+    assert "Zum Home-Bildschirm" in page
+
+
+def test_a_telegram_signup_has_no_ntfy_to_set_up():
+    entry = {"id": "u", "name": "Didi", "unsubscribe": "leave-me",
+             "rules": [{"preset": "night"}]}
+    page = web.welcome(entry, "", "", "Konstanz", telegram_bot="GleichNass_bot",
+                       code="ABC123", way="telegram")
+
+    assert "https://t.me/GleichNass_bot?start=ABC123" in page
+    assert "ntfy" not in page.lower(), "no app, no topic, no store links"
+    assert "<strong>1. Telegram verbinden</strong>" in page, "and it is step one, not three"
+
+
+def test_the_test_button_proves_itself_with_whatever_secret_exists():
+    """The topic is the secret an ntfy signup holds. A Telegram-only one has no
+    topic, so it falls back to the token it was given for leaving."""
+    entry = {"id": "u", "name": "Didi", "unsubscribe": "leave-me",
+             "rules": [{"preset": "night"}]}
+
+    with_topic = web.welcome(entry, "abc", "https://x.test/abo/abc", "Konstanz")
+    assert 'name="topic" value="abc"' in with_topic
+    assert 'name="token"' not in with_topic
+
+    without = web.welcome(entry, "", "", "Konstanz",
+                          telegram_bot="b", code="ABC123", way="telegram")
+    assert 'name="token" value="leave-me"' in without
+
+
+def test_an_unlinked_telegram_signup_is_told_why_nothing_arrived():
+    """Nothing sent and nothing failed is not a success, and "Das hat nicht
+    geklappt" over an empty list explains nothing."""
+    page = web._test_result([], [], waiting_for_telegram=True)
+    assert "Noch nichts zu schicken" in page
+    assert "Telegram ist noch nicht verbunden" in page
+
+
+def test_a_working_ntfy_test_is_not_nagged_about_telegram():
+    page = web._test_result(["ntfy"], [], waiting_for_telegram=False)
+    assert "Telegram" not in page

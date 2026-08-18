@@ -118,7 +118,10 @@ def create(
     if unknown:
         raise ValueError(f"unknown mode(s): {', '.join(unknown)}")
 
-    channels = [dict(spec) for spec in channels] if channels else [{"type": "ntfy"}]
+    # An empty list is not "unspecified": a Telegram signup deliberately starts
+    # with no channel, because there is nothing to write down until the person
+    # has messaged the bot and the code is claimed.
+    channels = [dict(spec) for spec in channels] if channels is not None else [{"type": "ntfy"}]
     topic = None
     for spec in channels:
         # Every ntfy channel needs a topic nobody can guess; generate any that
