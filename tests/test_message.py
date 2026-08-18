@@ -91,6 +91,18 @@ def test_a_short_horizon_is_admitted_in_the_all_clear():
     assert "reicht nur bis 16:00" in note.body
 
 
+def test_the_all_clear_quotes_the_provider_that_saw_furthest():
+    """The radar is asked first but only reaches two hours; a digest must not
+    tell somebody it stays dry until 14:00 when it means the whole day."""
+    radar = outlook(rain=False, truncated=True)
+    radar.provider = "dwd-radar"
+    note = render(person(), build_rule({"preset": "night"}, DEFAULTS),
+                  consensus([radar, outlook(rain=False)]), NOW)
+
+    assert "Trocken bis 02:00" in note.body
+    assert "reicht nur bis" not in note.body, "one full-length source is enough"
+
+
 def test_english_works_too():
     rule = build_rule({"preset": "night"}, DEFAULTS)
     note = render(person("en"), rule, consensus([outlook()]), NOW)

@@ -95,6 +95,13 @@ def test_presets_expand_and_stay_overridable():
     assert tweaked.every == timedelta(minutes=15), "unset preset fields survive"
 
 
+def test_no_preset_speaks_up_when_it_stays_dry():
+    """Silence is the good news. Only a rule that asks for it hears about dry weather."""
+    for preset in ("night", "morning", "imminent"):
+        assert not build_rule({"preset": preset}, DEFAULTS).notify_when_dry
+    assert build_rule({"preset": "night", "notify_when_dry": True}, DEFAULTS).notify_when_dry
+
+
 def test_a_rule_can_be_written_from_scratch():
     rule = build_rule({"name": "commute", "at": "07:30", "window": "2h"}, DEFAULTS)
     assert (rule.name, rule.window) == ("commute", timedelta(hours=2))

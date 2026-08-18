@@ -114,7 +114,9 @@ class Consensus:
     """The one the notification quotes. Providers are configured most-trustworthy
     first, so this is the first that expects rain, but one that can see the
     whole window wins over one that cannot, otherwise a two-hour radar blip ends
-    up being announced as the forecast for the whole night."""
+    up being announced as the forecast for the whole night. When nobody expects
+    rain it is instead the one that saw furthest, because an all-clear is only
+    worth as much as the horizon behind it."""
     agreeing: int = 0
     answering: int = 0
     will_rain: bool = False
@@ -124,9 +126,14 @@ def consensus(outlooks: list[Outlook], min_agreement: int = 1) -> Consensus:
     answered = [o for o in outlooks if o.has_data]
     wet = [o for o in answered if o.will_rain]
     ranked = [o for o in wet if not o.truncated] + [o for o in wet if o.truncated]
+    # An all-clear must come from whoever saw the most of the window. The radar
+    # is asked first because it is the best source inside its two hours, but
+    # "dry for the next two hours" is not the answer to "does it rain today".
+    # max keeps the configured order among equals.
+    furthest = max(answered, key=lambda o: o.covered_until, default=None)
     return Consensus(
         outlooks=answered,
-        leading=next(iter(ranked), None) or next(iter(answered), None),
+        leading=next(iter(ranked), None) or furthest,
         agreeing=len(wet),
         answering=len(answered),
         will_rain=len(wet) >= max(1, min_agreement),

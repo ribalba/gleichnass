@@ -82,7 +82,9 @@ def render(
     label = words["labels"].get(rule.name, rule.name)
 
     if not verdict.will_rain:
-        end = verdict.outlooks[0].covered_until if verdict.outlooks else now
+        # The leading outlook is the one that saw furthest, so the all-clear
+        # runs to the end of the window whenever anyone could see that far.
+        end = verdict.leading.covered_until if verdict.leading else now
         return Notification(
             title=words["dry_window"].format(label=label),
             body="\n".join([

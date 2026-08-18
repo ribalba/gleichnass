@@ -15,8 +15,8 @@ from .analyze import Threshold
 from .util import parse_duration, parse_time_of_day
 
 PRESETS: dict[str, dict] = {
-    "night": {"at": "20:00", "window": "12h", "notify_when_dry": True},
-    "morning": {"at": "08:00", "window": "12h", "notify_when_dry": True},
+    "night": {"at": "20:00", "window": "12h", "notify_when_dry": False},
+    "morning": {"at": "08:00", "window": "12h", "notify_when_dry": False},
     "imminent": {"every": "15m", "window": "1h", "notify_when_dry": False},
 }
 

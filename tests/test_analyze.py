@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from gleichnass.analyze import Threshold, analyze
+from gleichnass.analyze import Outlook, Threshold, analyze, consensus
 from gleichnass.models import Forecast, Location, Slot
 
 BERLIN = Location(52.52, 13.40, "Berlin")
@@ -82,3 +82,27 @@ def test_intensity_scales_with_slot_length():
     threshold = Threshold(min_mm_per_hour=0.2, min_probability=0)
     assert threshold.hits(burst)
     assert not threshold.hits(drizzle)
+
+
+def _outlook(name, *, hours, rain=False):
+    start = datetime(2026, 8, 17, 20, 0, tzinfo=UTC)
+    result = Outlook(provider=name, source=name, window_start=start,
+                     window_end=start + timedelta(hours=12),
+                     covered_until=start + timedelta(hours=hours))
+    if rain:
+        result.onset = start + timedelta(hours=1)
+        result.until = start + timedelta(hours=2)
+    return result
+
+
+def test_an_all_clear_is_led_by_the_provider_that_saw_furthest():
+    short, long = _outlook("dwd-radar", hours=2), _outlook("icon-d2", hours=12)
+    assert consensus([short, long]).leading is long
+    assert consensus([short]).leading is short, "a short horizon still answers"
+
+
+def test_rain_still_outranks_a_longer_dry_forecast():
+    """Reach only decides the all-clear. A wet provider is still what gets quoted."""
+    wet = _outlook("dwd-radar", hours=2, rain=True)
+    verdict = consensus([wet, _outlook("icon-d2", hours=12)])
+    assert verdict.leading is wet and verdict.will_rain
