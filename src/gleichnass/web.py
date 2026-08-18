@@ -416,7 +416,7 @@ def _telegram_step(link: str, bot: str, code: str, platform: str) -> str:
       <a class="btn btn-quiet" href="{html.escape(link)}">Direkt @{html.escape(bot)} öffnen</a>
     </p>
     <p class="privacy" style="margin-top:.7rem">
-      Geht beides nicht, schreibe dem Bot von Hand:
+      Geht beides nicht, schreibe dem Bot von Hand:<br>
       <code>/start {html.escape(code)}</code>
     </p>
   </div>"""
@@ -430,7 +430,7 @@ def _telegram_step(link: str, bot: str, code: str, platform: str) -> str:
       <a class="btn btn-go btn-block" href="{html.escape(link)}">@{html.escape(bot)} öffnen</a>
     </p>
     <p class="privacy" style="margin-top:.7rem">
-      Geht das nicht, schreibe dem Bot von Hand:
+      Geht das nicht, schreibe dem Bot von Hand:<br>
       <code>/start {html.escape(code)}</code>
     </p>
   </div>"""

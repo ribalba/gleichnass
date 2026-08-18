@@ -116,6 +116,7 @@
   }
 
   .page { max-width: var(--page); margin: 0 auto; padding: 0 1.5rem; }
+  @media (max-width: 30rem) { .page { padding: 0 1.1rem; } }
 
   h1, h2, h3 { margin: 0; text-wrap: balance; letter-spacing: -.028em; }
   h1 { font-size: clamp(2.15rem, 5.6vw, 3.5rem); font-weight: 800; line-height: 1.06; }
@@ -249,6 +250,19 @@
   }
   .flow-num i { display: none; font-style: normal; }
   .flow-body { min-width: 0; display: flex; flex-direction: column; gap: .55rem; align-items: flex-start; }
+  @media (max-width: 34rem) {
+    .flow-step { padding: 1.15rem 1.15rem 1.3rem; gap: .55rem .7rem; grid-template-columns: 2rem minmax(0, 1fr); }
+    .flow-num { width: 2rem; height: 2rem; font-size: .98rem; }
+    /* The body's children become the step's own grid items, so the heading can
+       sit beside the number while everything under it uses the full width. */
+    .flow-body { display: contents; }
+    .flow-body > * { grid-column: 1 / -1; }
+    .flow-body > h3 { grid-column: 2; align-self: center; }
+    .flow-body > .btn { justify-content: center; }
+    /* The form's own card is the same white as the step it sits in, so its
+       padding only cost width. */
+    .flow-body > .signup { margin-top: .3rem; padding: 0; }
+  }
   .aside-card {
     margin-top: 1.6rem; max-width: 40rem; padding: 1.4rem 1.5rem;
     border: 2px solid var(--sun); border-radius: var(--r);
@@ -369,20 +383,27 @@
     padding: clamp(1.75rem, 4vw, 2.75rem);
     display: grid; gap: 2rem;
   }
+  .host > * { min-width: 0; }
   @media (min-width: 52rem) { .host { grid-template-columns: 1fr 1fr; align-items: center; } }
   .host h2 { color: #ffffff; }
   .host p { color: #b9c6e2; }
   .host a:not(.btn) { color: var(--sun); }
   .host pre {
-    margin: 0; padding: 1.15rem 1.25rem; overflow-x: auto; border-radius: 14px;
+    margin: 0; padding: 1.15rem 1.25rem; border-radius: 14px;
     background: rgb(255 255 255 / .07); color: #eaf0ff;
-    font: 400 .87rem/1.8 var(--mono);
+    font: 400 .82rem/1.8 var(--mono);
+    /* A command is easier to read wrapped than scrolled sideways, and where it
+       fits - which is most of the time - nothing about it changes. */
+    white-space: pre-wrap; overflow-wrap: anywhere;
   }
+  @media (max-width: 34rem) { .host pre { padding: 1rem; } }
   .host pre .c { color: #8fa2c8; }
   .host .buttons { margin-top: 1.4rem; }
   .host .btn-quiet { color: #ffffff; border-color: rgb(255 255 255 / .35); }
   .host .btn-quiet:hover { border-color: var(--sun); color: var(--sun); }
-  code { font: 400 .89em var(--mono); }
+  /* A command or a topic is one long word: let it break rather than
+     push the page sideways, but only when it does not fit as it is. */
+  code { font: 400 .89em var(--mono); overflow-wrap: break-word; }
 
   /* ---- footer ------------------------------------------------------- */
 
