@@ -108,12 +108,11 @@ def test_telegram_is_offered_only_where_a_bot_is_configured():
     """Better no option than one that cannot work."""
     without = web.landing().decode()
     assert 'value="telegram"' not in without
-    assert "Lieber Telegram" not in without, "and no card pointing at a missing choice"
+    assert "Telegram" not in without, "and nothing anywhere pointing at a missing choice"
 
     with_bot = web.landing(telegram_bot="gleichnass_bot").decode()
     assert 'value="telegram"' in with_bot
     assert "@gleichnass_bot" in with_bot
-    assert "Lieber Telegram" in with_bot
 
 
 def test_the_configured_bot_replaces_the_one_in_the_template():

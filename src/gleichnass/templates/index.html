@@ -270,13 +270,6 @@
        padding only cost width. */
     .flow-body > .signup { margin-top: .3rem; padding: 0; }
   }
-  .aside-card {
-    margin-top: 1.6rem; max-width: 40rem; padding: 1.4rem 1.5rem;
-    border: 2px solid var(--sun); border-radius: var(--r);
-    display: flex; flex-direction: column; gap: .7rem;
-  }
-  .aside-card p { font-size: .95rem; color: var(--muted); }
-
   /* ---- picking a way in ---------------------------------------------- */
 
   /* Three cards, each an honest summary of what that way costs. Stacked rather
@@ -715,7 +708,7 @@ ab <span id="onset-time">14:45</span> · 1.8 mm, Spitze 3.2 mm/h</div>
             <div>
               <label class="field" for="name">Wie heißt du?</label>
               <input type="text" id="name" name="name" required autocomplete="name"
-                     placeholder="Didi" maxlength="60">
+                     placeholder="Dein Name" maxlength="60">
             </div>
             <div class="place-field">
               <label class="field" for="place">Für welchen Ort?</label>
@@ -805,23 +798,6 @@ ab <span id="onset-time">14:45</span> · 1.8 mm, Spitze 3.2 mm/h</div>
         </div>
       </li>
     </ol>
-
-    <!--telegram:start-->
-    <div class="aside-card">
-      <h3>Lieber Telegram?</h3>
-      <p>
-        Wenn du Telegram sowieso nutzt, brauchst du gar keine neue App. Wähl
-        oben Telegram: nach dem Anmelden bekommst du einen Knopf, der Telegram
-        beim Bot öffnet und deinen Code abschickt. Mehr ist es nicht, keine
-        Chat-ID heraussuchen, kein Warten auf jemanden, der dich freischaltet.
-      </p>
-      <p>
-        Unsicher? Nimm die ntfy-App. Sie ist der zuverlässigste Weg, und sie
-        erfährt nichts über dich, was <a href="https://ntfy.sh">ntfy</a> nicht
-        ohnehin für die Zustellung braucht.
-      </p>
-    </div>
-    <!--telegram:end-->
   </div>
 </section>
 
@@ -885,7 +861,7 @@ git clone https://github.com/ribalba/gleichnass
 cd gleichnass
 docker compose up -d</pre>
         <p style="margin-top:1rem;font-size:.9rem">
-          Danach <code>gleichnass add-user --name "Didi" --place Konstanz</code>,
+          Danach <code>gleichnass add-user --name "Bart" --place Konstanz</code>,
           QR-Code scannen, fertig. Für Freunde gibt es eine Anmeldeseite, die
           Thema und QR-Code selbst erzeugt.
         </p>
